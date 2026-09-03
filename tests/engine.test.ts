@@ -4,7 +4,7 @@ import { ResearchStore } from '../src/store';
 import type { Evidence, ResearchBridge, SearchResult } from '../src/types';
 const evidence: Evidence = { id: 'E1', source: 'news', title: 'Relevant release', summary: 'OpenAI release', url: 'https://example.org/A?x=1', publishedAt: new Date().toISOString(), coverage: 'headline' };
 const batch: SearchResult = { source: 'news', status: 'ok', items: [evidence] };
-function bridge(configured = true): ResearchBridge { return { ai: { status: async () => ({ configured }), generate: async (input) => ({ text: input.maxOutputTokens === 500 ? '{"queries":["OpenAI","OpenAI releases"]}' : '有一个新进展。[E1]' }) }, research: { search: async ({ source }) => source === 'news' ? batch : ({ source, status: 'no-results', items: [] }) } }; }
+function bridge(configured = true): ResearchBridge { return { ai: { status: async () => ({ configured }), generate: async (input) => ({ text: input.maxOutputTokens === 500 ? '{"queries":["OpenAI","OpenAI releases"]}' : input.maxOutputTokens === 900 ? '{"keep":["E1"]}' : '有一个新进展。[E1]' }) }, research: { search: async ({ source }) => source === 'news' ? batch : ({ source, status: 'no-results', items: [] }) } }; }
 describe('research evidence integrity', () => {
   test('deduplicates tracking links without lowercasing case-sensitive paths', () => {
     expect(canonicalUrl('https://Example.org/A?x=1&utm_source=foo#section')).toBe('https://example.org/A?x=1');
@@ -61,4 +61,16 @@ test('semantic relevance uses real evidence IDs and preserves provenance', async
   b.ai.generate = async (input) => ({ text: input.maxOutputTokens === 500 ? '{"queries":["OpenAI"]}' : input.maxOutputTokens === 900 ? '{"keep":["E999"]}' : 'Relevant [E1]' });
   const retry = newRun('OpenAI', 30, 'standard'); await research(b, retry, new AbortController().signal, async () => {});
   expect(retry.evidence.length).toBe(5); expect(retry.warnings.join()).toContain('语义筛选暂不可用');
+});
+
+
+test('planner cannot silently replace the original research topic', async () => {
+  const b = bridge(); b.ai.generate = async input => ({ text: input.maxOutputTokens === 500 ? '{"queries":["unrelated keyword"]}' : input.maxOutputTokens === 900 ? '{"keep":["E1"]}' : 'Report [E1]' });
+  const run = newRun('OpenAI', 30, 'standard'); await research(b, run, new AbortController().signal, async () => {});
+  expect(run.queries[0]).toBe('OpenAI'); expect(run.queries.length).toBeLessThanOrEqual(2);
+});
+test('semantic filtering also rejects a sparse set of irrelevant hits', async () => {
+  const b = bridge(); b.ai.generate = async input => ({ text: input.maxOutputTokens === 500 ? '{"queries":["OpenAI"]}' : '{"keep":[]}' });
+  const run = newRun('OpenAI', 30, 'standard'); await research(b, run, new AbortController().signal, async () => {});
+  expect(run.evidence).toHaveLength(0); expect(run.report).toContain('没有找到足够的相关证据');
 });

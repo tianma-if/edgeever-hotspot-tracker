@@ -21,7 +21,7 @@ flowchart LR
 
 `src/engine.ts` owns research orchestration. Quick mode sends one query to four sources (six hits each). Standard and deep modes ask the default model for up to two or three queries respectively (ten hits per source/query). Requests run in pairs. Optional Hacker News comment enrichment adds up to two requests per query. Selection is capped at 40 evidence items.
 
-Ranking combines reciprocal source rank and query-token overlap. It reserves representatives from available sources and does not compare unlike platform engagement counts. Standard/deep runs apply one semantic relevance pass when more than three items survive. Unknown IDs or invalid JSON fall back to local relevance. Planning failure falls back to the original topic. No model means evidence-only output.
+Ranking combines reciprocal source rank and query-token overlap. It reserves representatives from available sources and does not compare unlike platform engagement counts. Standard/deep runs apply one semantic relevance pass to all surviving items, including sparse results. The original topic is always retained as one query to prevent planner drift. Unknown IDs or invalid JSON fall back to local relevance. Planning failure falls back to the original topic. No model means evidence-only output.
 
 Each item retains its original URL, publication time where available, source, excerpt, and coverage label. Query parameters used for tracking are removed for deduplication. Old/future timestamps are excluded; undated evidence stays explicitly undated. A generated `[E12]` citation can only link to a collected `E12`. This validates provenance, not semantic entailment or factual truth. Reports instruct the model to attribute headline claims rather than invent article details.
 
