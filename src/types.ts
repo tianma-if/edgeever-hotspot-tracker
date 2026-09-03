@@ -33,7 +33,8 @@ export interface Run {
   id: string; topic: string; days: number; depth: 'quick' | 'standard' | 'deep';
   createdAt: string; status: RunStatus; progress: string; queries: string[];
   evidence: Evidence[]; coverage: SearchResult[]; report: string; warnings: string[];
+  sources?: Source[]; reportKind?: 'ai' | 'evidence' | 'empty';
   followUps: FollowUp[]; noteId?: string; watchId?: string; newEvidence?: number;
 }
-export interface Watch { id: string; topic: string; days: number; scheduled: boolean; notebookId?: string; lastRunId?: string }
+export interface Watch { id: string; topic: string; days: number; scheduled: boolean; sources?: Source[]; depth?: Run['depth']; baselineUrls?: string[]; notebookId?: string; lastRunId?: string }
 export interface SavedState { version: 1; runs: Run[]; watches: Watch[] }

@@ -4,7 +4,16 @@
 
 Research a topic, compare recent developments, and keep a cited report in EdgeEver. No Last30Days installation, Python environment, Docker sidecar, or separate research service.
 
-**Status: v0.1.0 preview.** This plugin requires the new `ai:generate` and `research:search` host capabilities. They are included as reproducible EdgeEver source integration in this repository and tested locally; they are **not yet shipped in a public EdgeEver release**. An older host rejects the unsupported permissions. Installing this plugin alone does not upgrade EdgeEver.
+**Status: v0.2.0 preview.** This plugin requires the new `ai:generate` and `research:search` host capabilities. They are included as reproducible EdgeEver source integration in this repository and tested locally; they are **not yet shipped in a public EdgeEver release**. An older host rejects the unsupported permissions. Installing this plugin alone does not upgrade EdgeEver.
+
+## New in 0.2
+
+- Choose the sources for each research run. Watchlists remember the original sources and depth; existing watchlists keep all sources and standard depth.
+- Generate or regenerate the AI report from existing evidence without another search. A failed or cancelled retry preserves the previous report.
+- Filter history by topic and evidence by source. Reports show headline-only and unknown-date counts; evidence-only runs are labeled separately.
+- Bounded requests prevent endless waiting. If AI configuration is temporarily unavailable, public evidence is still collected.
+- Watchlists retain their comparison links after older research leaves the 30-run history. Different source/depth combinations can be tracked separately.
+
 
 ## What it does
 
