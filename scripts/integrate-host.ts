@@ -86,3 +86,8 @@ await edit('apps/web/src/lib/plugins/plugin-host.ts', 'private async activatePlu
 await edit('apps/web/src/lib/plugins/plugin-host.ts', 'await this.activatingPlugins.get(pluginId)?.catch', '  private async deactivatePlugin(pluginId: string) {\n    const active', '  private async deactivatePlugin(pluginId: string) {\n    await this.activatingPlugins.get(pluginId)?.catch(() => undefined);\n    const active');
 await copy('integration/plugin-research-lifecycle.fixture.mjs', 'apps/web/src/lib/plugins/plugin-research-lifecycle.fixture.mjs');
 await copy('integration/plugin-research-lifecycle.test.mjs', 'apps/web/src/lib/plugins/plugin-research-lifecycle.test.mjs');
+
+// Plugins retain create() IDs; web sync replaces local IDs with server IDs.
+await edit('apps/web/src/lib/repository.ts', 'memoId = mapping?.remoteId ?? memoId;', '  async getMemo(memoId, includeDeleted = false) {\n    const localPromise', '  async getMemo(memoId, includeDeleted = false) {\n    if (memoId.startsWith("local_")) {\n      const mapping = await localDb.idMappings.get([scope, memoId]);\n      memoId = mapping?.remoteId ?? memoId;\n    }\n    const localPromise');
+await edit('apps/web/src/components/WorkspaceApp.tsx', 'options?: { search?: string }) => {\n    setRequestedPluginPanel(null);', 'options?: { search?: string }) => {\n    navigateWorkspaceHome();', 'options?: { search?: string }) => {\n    setRequestedPluginPanel(null);\n    navigateWorkspaceHome();');
+await copy('integration/plugin-research-note-mapping.test.mjs', 'apps/web/src/lib/plugin-research-note-mapping.test.mjs');

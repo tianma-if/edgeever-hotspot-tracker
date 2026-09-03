@@ -19,12 +19,13 @@ bun run build:plugin-api
 bun test apps/api/src/plugin-research-routes.test.mjs
 bun test apps/web/src/lib/plugins/plugin-research-permissions.test.mjs
 bun test apps/web/src/lib/plugins/plugin-research-lifecycle.test.mjs
+bun test apps/web/src/lib/plugin-research-note-mapping.test.mjs
 bun run typecheck
 bun run typecheck:mobile
 bun run build:web
 ```
 
-审阅 SDK 权限／类型、客户端桥接、Web 插件上下文与 WorkspaceApp 接线、共享 API 注册、固定来源适配、依赖及锁文件，以及 PluginPanelDialog 的响应式挂载修复。将新增 API 同步到中英文插件开发文档，并按 EdgeEver 原有 main 分支及发版流程交付。
+审阅 SDK 权限／类型、客户端桥接、Web 插件上下文与 WorkspaceApp 接线、共享 API 注册、固定来源适配、依赖及锁文件，以及 PluginPanelDialog 响应式挂载、异步启动／清理串行处理、已同步临时笔记 ID 查询修复。将新增 API 同步到中英文插件开发文档，并按 EdgeEver 原有 main 分支及发版流程交付。
 
 脚本在验证过的结构上可重复执行；锚点变化时会报错而非猜测，但后续步骤失败前可能已写入部分变更。所属生成文件会用本仓库内容覆盖。提交前审阅差异，避免包含源码目录里的其他进行中工作。无需迁移数据库或已保存密钥。
 
