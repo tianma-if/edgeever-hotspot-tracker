@@ -2,7 +2,7 @@
 
 [简体中文](host-capabilities.zh-CN.md)
 
-Status: implemented in the local EdgeEver development tree on 2026-09-03; not yet shipped. The 0.4 plugin candidate requires an EdgeEver version that recognizes `ai:generate` and `network:public`. Ordinary users will upgrade EdgeEver normally and install the plugin; no source patch or extra research service is required.
+Status: implemented in the local EdgeEver development tree on 2026-09-03; not yet shipped. The v0.4.0 plugin preview requires an EdgeEver version that recognizes `ai:generate` and `network:public`. Ordinary users will upgrade EdgeEver normally and install the plugin; no source patch or extra research service is required.
 
 ## Responsibilities
 
@@ -59,7 +59,7 @@ No topic, source, date window, evidence schema or report fields enter the host A
 
 Deterministic tests cover all four source adapters, AI delegation, denied permissions, declared-host enforcement, upstream errors, size limits, cancellation, DNS address validation, native settings and UI behavior. The browser integration run retrieved 11 real items from news/HN, generated a cited AI report, successfully retried generation from retained evidence, and saved the report as a note. GitHub/Reddit contributed zero items to that run; this is not evidence of successful live content retrieval from those two sources. Self-hosted DNS policy tests passed, but a positive TLS smoke test on this machine was blocked by its reserved fake-IP DNS response. Cloudflare development transport was used for the browser run.
 
-Official host release and production Web/desktop verification remain release gates. This branch is not a promise of compatibility with older production versions. No release tag is created for this candidate.
+Official host release and production Web/desktop verification remain gates for stable availability. The v0.4.0 package is published as a prerelease for compatible development hosts and does not promise compatibility with older production versions.
 
 ## Retired integration
 

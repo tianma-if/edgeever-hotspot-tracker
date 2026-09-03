@@ -4,7 +4,7 @@
 
 Research a topic, compare recent developments, and keep a cited report in EdgeEver. No Last30Days installation, Python environment, Docker sidecar, or separate research service.
 
-**Status: 0.4 development candidate, not released.** Source requests, parsing, ranking, and report orchestration live in the plugin bundle. EdgeEver's local development implementation now provides generic AI generation and public HTTPS transport, with no research-specific host routes or installation patches. Browser integration retrieved real evidence, generated a cited report, and recovered a failed generation using retained evidence. These generic APIs still need to ship in an official EdgeEver version before ordinary installation is supported.
+**Status: v0.4.0 preview release.** Source requests, parsing, ranking, and report orchestration live in the plugin bundle. EdgeEver's local development implementation now provides generic AI generation and public HTTPS transport, with no research-specific host routes or installation patches. Browser integration retrieved real evidence, generated a cited report, and recovered a failed generation using retained evidence. These generic APIs still need to ship in an official EdgeEver version before ordinary installation is supported.
 
 See the [generic host API contract](docs/host-capabilities.md). Earlier v0.1–v0.3 previews used a dedicated host integration; that architecture is superseded. Do not apply those integration patches.
 
@@ -47,7 +47,7 @@ The first version does not include X, YouTube, TikTok, Instagram, automatic topi
 
 ## Installation status
 
-The architecture-correction branch is for review, not installation into a current production host. After an EdgeEver release ships the implemented generic capabilities, users will install the plugin through the normal marketplace flow and reuse their existing AI settings. They will not patch EdgeEver or deploy another service.
+The preview package is available from [v0.4.0 Releases](https://github.com/tianma-if/edgeever-hotspot-tracker/releases/tag/v0.4.0). In a compatible development host, install its [manifest](https://github.com/tianma-if/edgeever-hotspot-tracker/releases/download/v0.4.0/manifest.json) through Plugin Marketplace. Current production hosts without the new permissions cannot install this version. After an EdgeEver release ships the generic capabilities, users will upgrade normally and reuse their existing AI settings, without source patches or another service.
 
 Without an AI model, the plugin still retrieves public evidence and clearly labels the result as evidence-only. Model usage is billed by your configured provider. The plugin adds no source API keys, but public source availability depends on the instance's network and source rate limits.
 
