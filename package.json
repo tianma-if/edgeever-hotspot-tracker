@@ -1,0 +1,28 @@
+{
+  "name": "edgeever-hotspot-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "EdgeEver 热点追踪 — native research and watchlists without another service.",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "dev": "bun scripts/preview.ts",
+    "check": "bun run typecheck && bun test tests && bun run build",
+    "test:live": "bun scripts/live-check.ts"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.14",
+    "entities": "^8.0.0",
+    "fast-xml-parser": "^5.11.1",
+    "marked": "^18.0.11"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/jsdom": "^30.0.0",
+    "jsdom": "^30.0.1",
+    "typescript": "^7.0.2"
+  }
+}

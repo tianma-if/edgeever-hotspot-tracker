@@ -1,0 +1,27 @@
+{
+  "type": "plugin",
+  "id": "org.edgeever.hotspot-tracker",
+  "name": "EdgeEver 热点追踪",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "description": "追踪你关心的话题，汇集最新资讯与社区观点，一键生成研究笔记。",
+  "author": "EdgeEver",
+  "entry": "./main.js",
+  "platforms": [
+    "web",
+    "desktop"
+  ],
+  "permissions": [
+    "ai:generate",
+    "research:search",
+    "notes:read",
+    "notes:write",
+    "metadata:read",
+    "storage",
+    "schedules",
+    "ui:commands",
+    "ui:panels",
+    "ui:notices",
+    "ui:navigation"
+  ]
+}
