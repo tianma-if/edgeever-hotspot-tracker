@@ -5,10 +5,9 @@
 ```mermaid
 flowchart LR
   U[主题与时间范围] --> P[插件规划查询]
-  P --> H[EdgeEver 宿主权限检查]
-  H --> B[已有共享后端]
-  B --> N[新闻 / HN / GitHub / Reddit]
-  N --> F[标准化、时间过滤、去重]
+  P --> H[宿主通用网络传输]
+  H --> N[新闻 / HN / GitHub / Reddit]
+  N --> F[插件解析、时间过滤、去重]
   F --> R[相关性筛选与证据编号]
   R --> A[已有默认 AI 模型]
   A --> C[引用检查与安全渲染]
@@ -17,7 +16,7 @@ flowchart LR
 
 ## 各层职责
 
-`src/sources.ts` 复制到宿主已有后端运行。所有请求使用固定 HTTPS 目的地、拒绝重定向、20 秒超时和 2 MB 响应上限，不暴露通用 URL 代理。Cloudflare 与 Docker 复用同一组 Hono 业务路由，无需专门部署研究服务或迁移数据库。
+`src/sources.ts` 在插件包内运行，所有请求经注入的 `context.network.fetch` 发出，不隐式使用全局 fetch、研究专用端点或独立后端。适配器选择固定 HTTPS 目的地、拒绝重定向、设置 20 秒超时及 2 MB 响应上限。插件解析 XML／JSON 并生成自己的证据结构。公开传输解决浏览器 CORS 读取限制，平台访问限制和限流仍然适用。
 
 `src/engine.ts` 负责编排。快速模式用一个查询检索选定来源，每源最多六条；默认选择全部四个来源。标准／深入模式让默认模型规划最多两个／三个查询，每源每查询最多十条。搜索请求两路并发；HN 评论补充每个查询最多增加两次请求。最终最多保留 40 条证据。
 
@@ -31,14 +30,11 @@ flowchart LR
 
 ## 宿主边界
 
-- `context.ai.status()` 只返回是否配置以及模型显示名。
-- `context.ai.generate({system, prompt, maxOutputTokens, signal})` 经已有 AI 运行层调用工作区当前默认模型。
-- `context.research.search({query, source, days, limit}, {signal})` 返回结构化结果与来源状态。
-- 前两者要求 `ai:generate`，搜索要求 `research:search`；插件停用后上下文调用终止。
-- HTTP 路由要求交互式工作区用户身份；生成输入限制为提示词 90,000 字符、系统提示词 8,000 字符、输出 5,000 token、120 秒。供应商错误脱敏，公开演示环境禁用 AI 生成。
-- 每工作区、每运行实例的 AI／读取两组请求各限制四路并发。这是并发保护，不是全局分布式配额或计费系统。
+`src/runtime.ts` 用 `context.network.fetch` 和通用 `context.ai.status/generate` 构建插件内部的 `ResearchBridge`。`ResearchBridge`、`SearchInput`、`Evidence`、平台列表与报告提示词都是插件内部契约，不应由宿主 SDK 导出。不再依赖 `context.research`。
 
-新增接口不传出 AI 密钥、Cookie、通用 HTTP 请求能力、数据库对象或内部 React 状态；仍遵循 EdgeEver 原有的可信代码插件边界。
+通用 AI 与公开网络契约已在 EdgeEver 本地开发代码实现，但尚未发布。清单声明 `ai:generate`、`network` 和 `network:public`，不识别这些权限的旧宿主会拒绝安装；缺少 AI 时的运行时降级不能绕过清单校验。请求显式选择 `transport: "public"`，其他插件仍可使用原有浏览器请求模式。限制与验证状态见[通用能力契约](host-capabilities.zh-CN.md)。
+
+设置、笔记、调度与模型凭据由已有宿主通用服务管理；来源查询、解析、相关性、引用、追踪对比与报告结构属于插件。已删除的 `integration/` 实现与源码注入脚本不属于当前架构。
 
 ## 后续扩展边界
 

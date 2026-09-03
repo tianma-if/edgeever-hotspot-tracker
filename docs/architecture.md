@@ -5,10 +5,9 @@
 ```mermaid
 flowchart LR
   U[Topic and time window] --> P[Plugin planner]
-  P --> H[Permission-checked EdgeEver host]
-  H --> B[Existing shared EdgeEver backend]
-  B --> N[News / HN / GitHub / Reddit]
-  N --> F[Normalize, date-filter, deduplicate]
+  P --> H[Generic host network transport]
+  H --> N[News / HN / GitHub / Reddit]
+  N --> F[Plugin parses, date-filters, deduplicates]
   F --> R[Relevance filter and evidence IDs]
   R --> A[Existing default AI model]
   A --> C[Citation checks and safe rendering]
@@ -17,7 +16,7 @@ flowchart LR
 
 ## Responsibilities
 
-`src/sources.ts` is copied into the host's existing backend. Requests use fixed HTTPS destinations, manual redirect rejection, 20-second cancellation, and a 2 MB response limit. No generic URL proxy is exposed. The same Hono business routes run in Cloudflare and Docker; there is no research-specific deployment or database migration.
+`src/sources.ts` runs inside the plugin bundle. Every request uses the injected `context.network.fetch`; there is no implicit global fetch, research endpoint, or separate backend. Adapters choose fixed HTTPS destinations, reject redirects, limit responses to 2 MB, and use a 20-second deadline. The plugin parses XML/JSON and produces its own evidence records. Public transport avoids browser CORS restrictions; source access restrictions and rate limits still apply.
 
 `src/engine.ts` owns research orchestration. Quick mode sends one query to the selected sources (six hits each). All four sources are selected by default. Standard and deep modes ask the default model for up to two or three queries respectively (ten hits per source/query). Requests run in pairs. Optional Hacker News comment enrichment adds up to two requests per query. Selection is capped at 40 evidence items.
 
@@ -31,14 +30,11 @@ Each item retains its original URL, publication time where available, source, ex
 
 ## Host boundary
 
-- `context.ai.status()` returns configuration availability and model display name only.
-- `context.ai.generate({system, prompt, maxOutputTokens, signal})` uses the current workspace default model through the existing AI runtime.
-- `context.research.search({query, source, days, limit}, {signal})` returns a typed result and source status.
-- The first two require `ai:generate`; search requires `research:search`. Calls stop after plugin deactivation.
-- HTTP routes require an interactive authenticated workspace user. Generate input is bounded to 90,000 prompt characters, 8,000 system characters, 5,000 output tokens, and 120 seconds. Provider errors are redacted. Public demo AI generation is disabled.
-- Per-workspace, per-isolate concurrent requests are capped at four in each AI/read group. This is a concurrency guard, not a global distributed quota or billing system.
+`src/runtime.ts` builds an internal `ResearchBridge` from `context.network.fetch` and generic `context.ai.status/generate`. `ResearchBridge`, `SearchInput`, `Evidence`, platform lists, and report prompts are plugin-internal types and must not be exported by the host SDK. There is no `context.research` dependency.
 
-No AI key, cookie, generic HTTP fetch, database handle, or internal React state is passed through these new methods. Existing trusted-code plugin limitations still apply.
+The generic AI and public network contracts are implemented in the local EdgeEver development tree but have not shipped. The manifest declares `ai:generate`, `network` and `network:public`; older hosts that do not recognize these permissions reject installation. Runtime fallback without AI does not bypass manifest validation. Requests explicitly choose `transport: "public"`; ordinary browser fetch remains available for other plugins. See the [generic capability contract](host-capabilities.md) for limits and verification status.
+
+Settings, saved notes, schedules and model credentials belong to the existing generic host services. Source queries, parsing, relevance, citations, watch comparison and report structure belong to the plugin. The removed `integration/` implementations and injection script are not part of this architecture.
 
 ## Useful boundaries for the next version
 

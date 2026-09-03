@@ -37,3 +37,20 @@ test('redirects are rejected without following their destination', async () => {
   const result = await searchPublicSources({ query: 'AI', source: 'news', days: 7 }, { now, fetch: (async () => { calls++; return new Response('', { status: 302, headers: { location: 'http://127.0.0.1/secrets' } }); }) as unknown as typeof fetch });
   expect(calls).toBe(1); expect(result.status).toBe('unreachable');
 });
+
+
+test('HTML block pages are incomplete coverage, not empty RSS search results', async () => {
+  for (const source of ['news', 'reddit'] as const) {
+    const result = await searchPublicSources({ source, query: 'AI', days: 30 }, { fetch: async () => new Response('<html><body>Access restricted</body></html>') });
+    expect(result.status).toBe('unreachable');
+    expect(result.items).toEqual([]);
+  }
+});
+
+
+test('valid empty feeds remain clean empty results', async () => {
+  for (const source of ['news', 'reddit'] as const) {
+    const result = await searchPublicSources({ source, query: 'AI', days: 30 }, { fetch: async () => new Response(source === 'news' ? '<rss><channel/></rss>' : '<feed/>') });
+    expect(result.status).toBe('no-results');
+  }
+});

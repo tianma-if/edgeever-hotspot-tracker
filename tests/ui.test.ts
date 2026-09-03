@@ -8,7 +8,11 @@ function host() {
   const values = new Map<string, unknown>(); let creates = 0; let generated = 0; let lastNote = '';
   const context: PluginHost = {
     ai: { status: async () => ({ configured: true, modelName: 'Test model' }), generate: async (input) => { generated++; return { text: input.maxOutputTokens === 500 ? '{"queries":["AI"]}' : '可核查的发现 [E1]。<img src=x onerror="alert(1)"><script>alert(1)</script>' }; } },
-    research: { search: async ({ source }) => ({ source, status: source === 'news' ? 'ok' : 'no-results', items: source === 'news' ? [{ id: '', source, title: 'AI release', url: 'https://example.org/article', summary: 'AI release details', publishedAt: new Date().toISOString(), coverage: 'headline' }] : [] }) },
+    network: { fetch: async input => {
+      const domain = new URL(input).hostname;
+      if (domain === 'news.google.com') return new Response(`<rss><channel><item><title>AI release</title><link>https://example.org/article</link><description>AI release details</description><pubDate>${new Date().toUTCString()}</pubDate></item></channel></rss>`);
+      return new Response(domain === 'hn.algolia.com' ? '{"hits":[]}' : domain === 'api.github.com' ? '{"items":[]}' : '<feed/>');
+    } },
     commands: { register: () => () => {} }, ui: { panels: { register: () => () => {}, open: async () => {} }, showNotice: () => {}, openNote: async (id) => { lastNote = id; } },
     storage: { get: async <T>(key: string) => structuredClone(values.get(key) ?? null) as T | null, set: async (key, value) => { values.set(key, structuredClone(value)); }, remove: async (key) => { values.delete(key); } },
     notebooks: { list: async () => [{ id: 'notebook', name: 'Notebook' }] }, notes: { create: async () => { creates++; return { id: 'note-created' }; } },
@@ -29,10 +33,10 @@ test('native flow researches, sanitizes reports, saves once and reopens after pa
   close(); close = app.mount(container); root = container.firstElementChild!.shadowRoot!; expect(root.textContent).toContain('可核查的发现');
   close(); app.dispose(); container.remove();
 });
-test('old host shows an actionable upgrade message and cannot start a pretend research', async () => {
-  const fixture = host(); delete fixture.context.ai; delete fixture.context.research;
+test('missing generic network capability disables research with an explanation', async () => {
+  const fixture = host(); delete fixture.context.ai; delete fixture.context.network;
   const app = new TrackerApp(fixture.context); await app.init(); const container = document.createElement('div'); document.body.append(container); const close = app.mount(container); const root = container.firstElementChild!.shadowRoot!;
-  expect(root.textContent).toContain('请更新'); expect(findButton(root, '开始研究 ↗').disabled).toBe(true); close(); app.dispose(); container.remove();
+  expect(root.textContent).toContain('网络访问能力'); expect(findButton(root, '开始研究 ↗').disabled).toBe(true); close(); app.dispose(); container.remove();
 });
 
 test('source selection, report-only retry, and watch preferences work together', async () => {
@@ -40,8 +44,8 @@ test('source selection, report-only retry, and watch preferences work together',
   const commands = new Map<string, () => void | Promise<void>>();
   fixture.context.ai!.status = async () => ({ configured });
   fixture.context.ai!.generate = async () => ({ text: '资料中的变化 [E1]' });
-  const originalSearch = fixture.context.research!.search;
-  fixture.context.research!.search = async (input, options) => { searches++; expect(input.source).toBe('news'); return originalSearch(input, options); };
+  const originalFetch = fixture.context.network!.fetch;
+  fixture.context.network!.fetch = async (input, options) => { searches++; expect(new URL(input).hostname).toBe('news.google.com'); return originalFetch(input, options); };
   fixture.context.commands.register = command => { commands.set(command.id, command.run); return () => { commands.delete(command.id); }; };
   const app = new TrackerApp(fixture.context); await app.init();
   const container = document.createElement('div'); document.body.append(container); const close = app.mount(container); const root = container.firstElementChild!.shadowRoot!;
@@ -57,7 +61,7 @@ test('source selection, report-only retry, and watch preferences work together',
   findButton(root, '追踪这个话题').click(); await until(() => commands.size === 1);
   const watch = app.store.state.watches[0]; expect(watch.sources).toEqual(['news']); expect(watch.depth).toBe('quick'); expect(watch.baselineUrls).toEqual(['https://example.org/article']);
   app.store.state.runs = []; // Previous run aged out of bounded history.
-  fixture.context.research!.search = async ({ source }) => ({source, status:'ok',items:[{ id:'',source,title:'AI update',summary:'AI new evidence',url:'https://example.org/new',coverage:'headline' }]});
+  fixture.context.network!.fetch = async () => new Response('<rss><channel><item><title>AI update</title><link>https://example.org/new</link><description>AI new evidence</description></item></channel></rss>');
   await commands.get(`watch-${watch.id}`)!(); expect(app.store.state.runs[0].newEvidence).toBe(1); expect(app.store.state.runs[0].sources).toEqual(['news']);
   close(); app.dispose(); container.remove();
 });

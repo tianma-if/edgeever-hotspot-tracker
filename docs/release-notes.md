@@ -1,21 +1,15 @@
 ## 中文
 
-EdgeEver 热点追踪 0.3 预览版：
+0.4 架构调整候选，尚未发布。
 
-- 接入 EdgeEver 原生「插件设置」，可设默认时间范围、研究深度和四个来源开关。
-- 重新打开研究面板时读取最新设置，本次临时调整不写回默认值；已有研究与追踪配置保持独立。
-- 兼容无设置接口的宿主，设置读取失败有超时与回退提示；全部关闭来源时提示选择，不自动开启。
-- 无需额外 API Key，不会自动开启定时任务。
-
-仍需要支持 `ai:generate` / `research:search` 的 EdgeEver 宿主；适配代码在本仓库。用户无需部署 Last30Days。已保存笔记是快照。
+- 来源搜索与解析全部由插件执行，移除专用宿主研究接口和源码注入工具。
+- 接入通用 AI 与公开 HTTPS 传输，保留设置、研究历史和追踪功能。
+- 仍需等待 EdgeEver 正式版本发布通用 API；旧版宿主不支持此清单。用户无需部署另一套服务。
 
 ## English
 
-EdgeEver Hotspot Tracker 0.3 preview:
+0.4 architecture-correction candidate, not released.
 
-- Integrates EdgeEver's native plugin settings for default time range, research depth, and four source switches.
-- Reopening the panel loads current settings. Temporary panel choices never write defaults; existing research and watches retain their original configuration.
-- Supports hosts without a settings API. Failed reads have a deadline and fallback notice; disabling every source requires a choice before research instead of silently enabling sources.
-- Requires no extra API key and does not enable schedules.
-
-Requires an EdgeEver host with `ai:generate` / `research:search`; host integration is included in this repository. No Last30Days deployment is required. Saved notes remain snapshots.
+- Move source search and parsing into the plugin; remove dedicated host research APIs and source injection tooling.
+- Connect generic AI and public HTTPS transport, retaining settings, history, and watches.
+- Requires the generic APIs to ship in an official EdgeEver release; older hosts reject this manifest. Users do not deploy another service.

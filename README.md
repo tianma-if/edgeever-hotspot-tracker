@@ -4,7 +4,16 @@
 
 Research a topic, compare recent developments, and keep a cited report in EdgeEver. No Last30Days installation, Python environment, Docker sidecar, or separate research service.
 
-**Status: v0.3.0 preview.** This plugin requires the new `ai:generate` and `research:search` host capabilities. They are included as reproducible EdgeEver source integration in this repository and tested locally; they are **not yet shipped in a public EdgeEver release**. An older host rejects the unsupported permissions. Installing this plugin alone does not upgrade EdgeEver.
+**Status: 0.4 development candidate, not released.** Source requests, parsing, ranking, and report orchestration live in the plugin bundle. EdgeEver's local development implementation now provides generic AI generation and public HTTPS transport, with no research-specific host routes or installation patches. Browser integration retrieved real evidence, generated a cited report, and recovered a failed generation using retained evidence. These generic APIs still need to ship in an official EdgeEver version before ordinary installation is supported.
+
+See the [generic host API contract](docs/host-capabilities.md). Earlier v0.1–v0.3 previews used a dedicated host integration; that architecture is superseded. Do not apply those integration patches.
+
+## Changed in 0.4
+
+- Bundle all four public-source adapters and parsers with the plugin, using generic `context.network.fetch` and four declared destination hosts.
+- Remove the `research:search` permission, host source contracts, research routes, client adapter, and source-injection script.
+- Keep prompts, query planning, relevance filtering, and reports entirely in the plugin. Only general-purpose model invocation belongs in the host.
+- If a source cannot be read, report incomplete coverage. There is no fallback through hidden host routes, browser cookies, or third-party proxies.
 
 ## New in 0.3: native plugin settings
 
@@ -36,19 +45,13 @@ News and Reddit supply headline/body excerpts, not full articles or complete com
 
 The first version does not include X, YouTube, TikTok, Instagram, automatic topicless discovery, an always-on crawler, or verified population-wide trend measurements. A citation confirms a retrieved source URL, not the truth of every generated claim. Statements and numbers still need judgment.
 
-## Install after your EdgeEver host supports research
+## Installation status
 
-1. In EdgeEver, configure a default model in **Personal Center → AI settings** if you want AI reports. Existing users do not enter the same key again.
-2. Open **Plugin Marketplace**, paste the repository URL below, install, and enable the plugin.
-3. Open **Hotspot Tracker: Start research** in the command palette, then enter a topic.
-
-```text
-https://github.com/tianma-if/edgeever-hotspot-tracker
-```
+The architecture-correction branch is for review, not installation into a current production host. After an EdgeEver release ships the implemented generic capabilities, users will install the plugin through the normal marketplace flow and reuse their existing AI settings. They will not patch EdgeEver or deploy another service.
 
 Without an AI model, the plugin still retrieves public evidence and clearly labels the result as evidence-only. Model usage is billed by your configured provider. The plugin adds no source API keys, but public source availability depends on the instance's network and source rate limits.
 
-The plugin runs in EdgeEver's trusted client plugin environment, not a hard JavaScript sandbox. This plugin uses permission-checked host methods; it does not request cookies or receive the AI provider key. Search keywords go to selected public sources through your existing EdgeEver backend. Your question and collected excerpts go to your configured AI provider. Research history and watchlists stay in device-local plugin storage; notes you explicitly save use normal workspace synchronization.
+The plugin runs in EdgeEver's trusted client plugin environment, not a hard JavaScript sandbox. This plugin uses permission-checked host methods; it does not request cookies or receive the AI provider key. Search keywords go to selected public sources through the generic host network transport; parsing and source-specific logic execute in the plugin. Your question and collected excerpts go to your configured AI provider. Research history and watchlists stay in device-local plugin storage; notes you explicitly save use normal workspace synchronization.
 
 ## Develop
 
@@ -57,19 +60,17 @@ Use Bun 1.3.14 or later. End users do not run these commands.
 ```sh
 bun install --frozen-lockfile
 bun run check
-bun run test:live  # optional: four real public-source requests, no AI calls
+bun run test:live  # Bun transport smoke test only; does not verify browser CORS or host APIs
 bun run dev        # static development package server on 127.0.0.1:4178
 ```
 
-Install `http://127.0.0.1:4178/manifest.json` into a compatible local EdgeEver development instance. `bun run dev` serves the compiled plugin only; it is not a research backend. Rebuild, reinstall the development manifest to refresh the cached package, and reload EdgeEver after changing the bundle.
+Only install `http://127.0.0.1:4178/manifest.json` into a development host implementing the generic contracts. Older SDKs without `ai:generate` or `network:public` reject this manifest. `bun run dev` serves the compiled plugin only; it is not a research backend. Rebuild, reinstall the development manifest to refresh the cached package, and reload EdgeEver after changing the bundle.
 
 The build produces a single browser module plus `manifest.json`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt` in `dist/`. GitHub Releases distribute these files; the repository-root manifest must match the release manifest exactly. Tag builds are published as previews by the release workflow. CI runs deterministic tests and builds the bundle; it does not contact public sources or AI providers.
 
-## EdgeEver maintainer integration
+## Host boundary
 
-See [the integration guide](integration/README.md). It adds fixed-source search and existing-model generation to EdgeEver's shared backend, SDK, client, and plugin host. It also fixes delayed plugin panel mounting. This work belongs in a normal EdgeEver release; it is not another setup step for plugin users.
-
-The integration script updates only named anchors and owned integration files, but is not transactional. Apply it to a checkout where you can review the resulting diff. It does not commit, deploy, migrate databases, or modify stored credentials.
+Only generic network, AI, settings, notes, storage, and scheduling APIs are used. `src/runtime.ts` connects these capabilities to plugin-owned adapters; `src/sources.ts` is bundled, never copied to EdgeEver. See [the capability contract](docs/host-capabilities.md) for limits and verification status. No script in this repository writes into a host checkout.
 
 ## License
 

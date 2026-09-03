@@ -1,8 +1,8 @@
-/** Fixed public-source requests, intended to run inside EdgeEver's existing backend.
- * No user-supplied URLs, browser cookies, API keys or external proxy. */
+/** Plugin-owned public-source adapters. All transport goes through the host's generic network API.
+ * No host research routes, user-supplied destinations, cookies, API keys or external proxy. */
 import { XMLParser } from 'fast-xml-parser';
 import { decodeHTML } from 'entities';
-import type { Evidence, SearchInput, SearchResult } from './types';
+import type { Evidence, PublicFetch, SearchInput, SearchResult } from './types';
 const parser = new XMLParser({ ignoreAttributes: true, processEntities: false });
 const clean = (value: unknown, length = 1600): string => decodeHTML(decodeHTML(String(value ?? ''))).replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, length);
 const list = (v: unknown): any[] => Array.isArray(v) ? v : v ? [v] : [];
@@ -27,13 +27,13 @@ async function read(response: Response): Promise<string> {
   return new TextDecoder().decode(BufferlessConcat(parts, size));
 }
 function BufferlessConcat(parts: Uint8Array[], size: number) { const all = new Uint8Array(size); let offset = 0; for (const part of parts) { all.set(part, offset); offset += part.length; } return all; }
-export async function searchPublicSources(input: SearchInput, options: { fetch?: typeof fetch; signal?: AbortSignal; now?: number } = {}): Promise<SearchResult> {
-  const request = options.fetch ?? fetch;
+export async function searchPublicSources(input: SearchInput, options: { fetch: PublicFetch; signal?: AbortSignal; now?: number }): Promise<SearchResult> {
+  const request = options.fetch;
   const now = options.now ?? Date.now();
   const since = new Date(now - input.days * 86400000);
   const limit = Math.min(Math.max(input.limit ?? 10, 1), 15);
   const signal = AbortSignal.any([AbortSignal.timeout(20000), ...(options.signal ? [options.signal] : [])]);
-  const get = async (url: URL) => read(await request(url, { signal, redirect: 'manual', headers: { Accept: 'application/json, application/rss+xml, application/atom+xml, text/xml', 'User-Agent': 'EdgeEver-Hotspot-Tracker/0.1 (+https://edgeever.org)' } }));
+  const get = async (url: URL) => read(await request(url.href, { signal, redirect: 'manual', credentials: 'omit', headers: { Accept: 'application/json, application/rss+xml, application/atom+xml, text/xml' } }));
   try {
     let items: Evidence[] = [];
     if (input.source === 'news') {
@@ -41,6 +41,7 @@ export async function searchPublicSources(input: SearchInput, options: { fetch?:
       const isChinese = /[\u3400-\u9fff]/.test(input.query);
       url.search = new URLSearchParams({ q: `${input.query} after:${since.toISOString().slice(0, 10)}`, hl: isChinese ? 'zh-CN' : 'en-US', gl: isChinese ? 'CN' : 'US', ceid: isChinese ? 'CN:zh-Hans' : 'US:en' }).toString();
       const feed = parser.parse(await get(url));
+      if (!feed?.rss || !Object.prototype.hasOwnProperty.call(feed.rss, 'channel')) throw new Error('Source response changed');
       items = list(feed?.rss?.channel?.item).map((item) => ({ id: '', source: input.source, title: clean(item.title, 400), url: safeUrl(item.link) ?? '', summary: clean(item.description), publishedAt: date(item.pubDate), author: clean(item.source, 120), coverage: 'headline' as const }));
     } else if (input.source === 'hackernews') {
       const url = new URL('https://hn.algolia.com/api/v1/search');
@@ -69,6 +70,7 @@ export async function searchPublicSources(input: SearchInput, options: { fetch?:
       const xml = await get(url);
       // Atom link attributes must be parsed explicitly; public feed bodies are not full comment trees.
       const atom = new XMLParser({ ignoreAttributes: false, processEntities: false }).parse(xml);
+      if (!atom || !Object.prototype.hasOwnProperty.call(atom, 'feed')) throw new Error('Source response changed');
       items = list(atom?.feed?.entry).map((entry) => ({ id: '', source: input.source, title: clean(entry.title, 400), url: safeUrl(list(entry.link).find((l) => l['@_href'])?.['@_href']) ?? '', summary: clean(entry.content?.['#text'] ?? entry.content), publishedAt: date(entry.published ?? entry.updated), author: clean(entry.author?.name, 120), coverage: 'headline' as const }));
     } else { throw new Error('Unsupported source'); }
     items = items.filter((item) => item.url && item.title && (!item.publishedAt || (Date.parse(item.publishedAt) >= since.getTime() && Date.parse(item.publishedAt) <= now))).slice(0, limit);
@@ -76,6 +78,6 @@ export async function searchPublicSources(input: SearchInput, options: { fetch?:
   } catch (error) {
     if (options.signal?.aborted) throw options.signal.reason;
     console.warn(`[research:${input.source}]`, error instanceof Error ? error.name : 'Source request failed');
-    return { source: input.source, status: error instanceof Error && error.message === 'rate-limited' ? 'rate-limited' : 'unreachable', items: [], message: '来源暂时无法访问，本次报告不包含该来源的完整覆盖。' };
+    return { source: input.source, status: error instanceof Error && error.message === 'rate-limited' ? 'rate-limited' : 'unreachable', items: [], message: '来源暂时无法访问，可能受网络、跨域限制或平台限流影响。本次未覆盖该来源。' };
   }
 }

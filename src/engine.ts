@@ -120,7 +120,7 @@ export async function research(bridge: ResearchBridge, run: Run, signal: AbortSi
       run.report = degraded ? '本次未能获取足够证据，部分来源访问失败。不能据此判断该话题没有动态。请稍后重试，或调整关键词。' : '在选定时间范围内，没有找到足够的相关证据。可以扩大时间范围或调整关键词。';
     } else if (!status.configured) {
       run.reportKind = 'evidence';
-      run.warnings.push('尚未配置 AI：当前展示实际检索证据，不是 AI 综合报告。请在 EdgeEver 的 AI 设置中选择默认模型。');
+      run.warnings.push('尚未配置 AI 或宿主未开放通用 AI 能力：当前展示实际检索证据，不是 AI 综合报告。');
       run.report = '已找到以下公开资料。配置 EdgeEver 默认 AI 模型后，可以生成观点综合、比较分析和研究结论。';
     } else {
       run.status = 'writing'; run.progress = '正在交叉核对并整理报告'; await update();
