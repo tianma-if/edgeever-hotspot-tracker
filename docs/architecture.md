@@ -51,3 +51,9 @@ Add richer source adapters only after defining access, rate limits, and truthful
 Report regeneration only reads existing evidence. It neither reruns search nor changes the original research date/window. A failed or cancelled attempt leaves the prior report and note reference intact. Saved notes remain snapshots. Evidence passed to AI is capped at 40 IDs within roughly 56,000 characters; comments and long summaries are shortened before evidence IDs are dropped. The follow-up context also bounds previous answers. English relevance tokens use word boundaries so “AI” does not match “chair”.
 
 Source/depth preferences, report kind, and watch comparison URLs are optional additions to storage version 1. Older runs remain readable without a destructive migration. An empty new source selection is rejected. UI filters only change the display, never saved evidence or exported report coverage.
+
+## Native settings
+
+`manifest.json` declares six fields rendered by EdgeEver: `default.days`, `default.depth`, and `source.news` / `source.hackernews` / `source.github` / `source.reddit`. `src/settings.ts` reads `context.settings.get` with a five-second deadline and validates against the manifest. The manifest also owns fallback defaults; each failed or invalid field falls back with a visible warning. All-disabled sources remain disabled and block a new run until the user selects a source.
+
+Every panel mount reloads defaults before exposing the research form. Reads from closed panels cannot update a newer panel, and deactivation cancels the wait. Per-panel overrides never write settings; recorded runs and watches remain snapshots. No storage migration, new permission, credential, schedule, or backend deployment is introduced. Hosts lacking `context.settings` keep the previous behavior.

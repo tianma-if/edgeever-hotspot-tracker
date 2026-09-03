@@ -4,7 +4,15 @@
 
 Research a topic, compare recent developments, and keep a cited report in EdgeEver. No Last30Days installation, Python environment, Docker sidecar, or separate research service.
 
-**Status: v0.2.0 preview.** This plugin requires the new `ai:generate` and `research:search` host capabilities. They are included as reproducible EdgeEver source integration in this repository and tested locally; they are **not yet shipped in a public EdgeEver release**. An older host rejects the unsupported permissions. Installing this plugin alone does not upgrade EdgeEver.
+**Status: v0.3.0 preview.** This plugin requires the new `ai:generate` and `research:search` host capabilities. They are included as reproducible EdgeEver source integration in this repository and tested locally; they are **not yet shipped in a public EdgeEver release**. An older host rejects the unsupported permissions. Installing this plugin alone does not upgrade EdgeEver.
+
+## New in 0.3: native plugin settings
+
+Open **Plugin Marketplace → Hotspot Tracker → Plugin settings**, or use the plugin tools menu. Set the default time range (7/30/90 days), research depth, and four source switches there. Defaults are 30 days, standard depth, and all four sources.
+
+Settings stay on the current device. Close and reopen the research panel to apply them; temporary choices in the panel last until it closes. Saved runs and existing watches keep their original choices. If all default sources are disabled, choose at least one source before starting. Settings do not enable schedules or require another API key.
+
+Hosts without the settings API retain the previous controls and defaults. Failed/invalid settings reads fall back with an explanation; hosts still need the research capabilities described above.
 
 ## New in 0.2
 

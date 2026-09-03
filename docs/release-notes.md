@@ -1,23 +1,21 @@
 ## 中文
 
-EdgeEver 热点追踪 0.2 预览版：
+EdgeEver 热点追踪 0.3 预览版：
 
-- 可选择检索来源，追踪任务记住来源与研究深度。
-- 支持用已有资料重新生成报告，失败或取消会保留原报告。
-- 增加历史搜索、证据来源筛选，以及标题摘要／未知日期提示。
-- 增加请求超时恢复，收紧英文关键词匹配，并限制 AI 上下文大小。
-- 追踪对比链接独立保存，历史轮换后仍能比较新资料。
+- 接入 EdgeEver 原生「插件设置」，可设默认时间范围、研究深度和四个来源开关。
+- 重新打开研究面板时读取最新设置，本次临时调整不写回默认值；已有研究与追踪配置保持独立。
+- 兼容无设置接口的宿主，设置读取失败有超时与回退提示；全部关闭来源时提示选择，不自动开启。
+- 无需额外 API Key，不会自动开启定时任务。
 
-仍需要支持 `ai:generate` / `research:search` 的 EdgeEver 宿主；适配代码在本仓库。用户无需部署 Last30Days。已保存笔记是快照，重新生成和追问不会自动覆盖它。
+仍需要支持 `ai:generate` / `research:search` 的 EdgeEver 宿主；适配代码在本仓库。用户无需部署 Last30Days。已保存笔记是快照。
 
 ## English
 
-EdgeEver Hotspot Tracker 0.2 preview:
+EdgeEver Hotspot Tracker 0.3 preview:
 
-- Select sources; watchlists retain the original sources and research depth.
-- Regenerate reports from existing evidence; failure or cancellation preserves the previous report.
-- Search history, filter evidence by source, and see headline-only/unknown-date counts.
-- Recover from request timeouts, tighten English keyword matching, and bound AI context size.
-- Preserve comparison links independently of rotating research history.
+- Integrates EdgeEver's native plugin settings for default time range, research depth, and four source switches.
+- Reopening the panel loads current settings. Temporary panel choices never write defaults; existing research and watches retain their original configuration.
+- Supports hosts without a settings API. Failed reads have a deadline and fallback notice; disabling every source requires a choice before research instead of silently enabling sources.
+- Requires no extra API key and does not enable schedules.
 
-Requires an EdgeEver host with `ai:generate` / `research:search`; host integration is included in this repository. No Last30Days deployment is required. Saved notes remain snapshots and are not overwritten by regeneration or follow-up answers.
+Requires an EdgeEver host with `ai:generate` / `research:search`; host integration is included in this repository. No Last30Days deployment is required. Saved notes remain snapshots.

@@ -17,6 +17,7 @@ export interface ResearchBridge {
   research: { search(input: SearchInput, options?: { signal?: AbortSignal }): Promise<SearchResult> };
 }
 export interface PluginHost extends Partial<ResearchBridge> {
+  settings?: { get(key: string): Promise<string | number | boolean | null> };
   commands: { register(command: { id: string; title: string; run(): void | Promise<void> }): () => void };
   ui: {
     panels: { register(panel: { id: string; title: string; presentation?: 'fullscreen'; mount(container: HTMLElement): (() => void) | void }): () => void; open(id: string): Promise<void> };

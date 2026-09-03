@@ -5,6 +5,7 @@ import { SOURCE_NAMES, SOURCES, type PluginHost, type ResearchBridge, type Run, 
 import { ask, canonicalUrl, exportMarkdown, newRun, research, regenerateReport, selectedSources } from './engine';
 import { boundedRequest } from './requests';
 import { ResearchStore } from './store';
+import { readResearchDefaults } from './settings';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = '') { const node = document.createElement(tag); node.className = className; if (text) node.textContent = text; return node; }
 function button(text: string, action: () => unknown, className = 'secondary') { const node = el('button', className, text); node.type = 'button'; node.addEventListener('click', () => { void action(); }); return node; }
@@ -18,6 +19,7 @@ export class TrackerApp {
   private selected = ''; private topic = ''; private days = 30; private depth: Run['depth'] = 'standard';
   private sources: Source[] = [...SOURCES]; private evidenceSource: Source | 'all' = 'all'; private historyQuery = '';
   private lifetime = new AbortController();
+  private preferencesLoading = false;
   private root?: ShadowRoot; private notice = ''; private running?: { run: Run; controller: AbortController };
   private disposed = false; private pendingAsk = false; private askController?: AbortController;
   private notebooks: { id: string; name: string }[] = []; private notebookId = '';
@@ -30,7 +32,18 @@ export class TrackerApp {
     if (this.bridge) { try { const s = await boundedRequest(() => this.bridge!.ai.status(), this.lifetime.signal, 10000); this.configured = s.configured; this.modelName = s.modelName ?? ''; } catch { this.notice = '暂时无法连接 EdgeEver，请检查网络后重试。'; } }
     this.registerWatches();
   }
-  mount(container: HTMLElement) { const mount = el('div'); mount.style.height = '100%'; mount.style.minHeight = '0'; container.append(mount); this.root = mount.attachShadow({ mode: 'open' }); this.render(); return () => { mount.remove(); if (this.root?.host === mount) this.root = undefined; }; }
+  mount(container: HTMLElement) {
+    const mount = el('div'); mount.style.height = '100%'; mount.style.minHeight = '0'; container.append(mount);
+    const root = mount.attachShadow({ mode: 'open' }); this.root = root;
+    this.preferencesLoading = Boolean(this.host.settings);
+    this.render();
+    if (this.host.settings) void readResearchDefaults(this.host, this.lifetime.signal).then(defaults => {
+      if (this.disposed || this.root !== root) return;
+      this.days = defaults.days; this.depth = defaults.depth; this.sources = defaults.sources;
+      this.preferencesLoading = false; this.notice = defaults.warning; this.render();
+    }).catch(() => { /* Disposing the plugin cancels settings reads. */ });
+    return () => { mount.remove(); if (this.root === root) this.root = undefined; };
+  }
   dispose() { this.disposed = true; this.lifetime.abort(); this.running?.controller.abort(); this.askController?.abort(); for (const dispose of this.commandDisposers.values()) dispose(); this.root = undefined; }
   private notify(message: string) { this.notice = message; this.render(); }
   private async safely(action: () => Promise<unknown>) { try { await action(); } catch (error) { if (!this.disposed) this.notify(error instanceof Error ? error.message : '操作未完成，请重试。'); } }
@@ -45,6 +58,8 @@ export class TrackerApp {
   private async start(topic: string, days = this.days, watch?: Watch, background = false): Promise<Run | undefined> {
     if (!this.bridge) throw new Error('请先升级 EdgeEver，当前版本尚未提供插件研究接口。');
     if (this.running) throw new Error('已有研究正在进行，请等待完成或先取消。');
+    if (!watch && this.preferencesLoading) throw new Error('正在读取插件设置，请稍候。');
+    if (!selectedSources(watch ? watch.sources : this.sources).length) throw new Error('请至少选择一个检索来源。');
     if (!topic.trim()) { this.notify('先输入你想追踪的话题。'); return; }
     const run = newRun(topic, days, watch ? (watch.depth ?? 'standard') : this.depth, selectedSources(watch ? watch.sources : this.sources)); run.watchId = watch?.id;
     const previous = watch?.lastRunId ? this.store.state.runs.find((r) => r.id === watch.lastRunId) : undefined;
@@ -115,10 +130,12 @@ export class TrackerApp {
   }
   private renderHome(content: HTMLElement) {
     content.append(el('div', 'eyebrow', 'FOLLOW WHAT MATTERS'), el('h1', '', '你关心的，正在发生什么？'), el('p', 'sub', '从最新资讯到社区讨论，找到值得关注的变化。\n输入一个话题，让零散的信息成为有据可查的研究笔记。'));
+    if (this.preferencesLoading) { const loading = el('div', 'note', '正在读取插件设置…'); loading.setAttribute('role', 'status'); content.append(loading); return; }
+    if (this.host.settings) content.append(el('p', 'tiny', '默认偏好可在插件卡片或插件工具菜单的「插件设置」中修改。重新打开面板时生效；下方调整仅用于本次打开的面板。'));
     const composer = el('div', 'composer'); const input = el('textarea'); input.dataset.focus = 'topic'; input.setAttribute('aria-label', '研究主题'); input.placeholder = '例如：最近一个月，AI 编程工具有哪些新变化？'; input.value = this.topic; input.maxLength = 240; input.addEventListener('input', () => { this.topic = input.value; });
     input.addEventListener('keydown', (event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void this.safely(() => this.start(this.topic)); }); composer.append(input);
     const footer = el('div', 'composer-footer'); const controls = el('div', 'controls'); controls.append(this.select([['7', '最近 7 天'], ['30', '最近 30 天'], ['90', '最近 90 天']], String(this.days), '研究时间范围', (v) => { this.days = Number(v); }), this.select([['quick', '快速浏览'], ['standard', '标准研究'], ['deep', '深入研究']], this.depth, '研究深度', (v) => { this.depth = v; }));
-    const start = button(this.running ? '查看当前研究 ↗' : '开始研究 ↗', () => this.safely(async () => { if (this.running) { this.selected = this.running.run.id; this.nav('report'); } else await this.start(this.topic); }), 'primary'); start.disabled = !this.bridge; footer.append(controls, start); composer.append(footer); content.append(composer);
+    const start = button(this.running ? '查看当前研究 ↗' : '开始研究 ↗', () => this.safely(async () => { if (this.running) { this.selected = this.running.run.id; this.nav('report'); } else await this.start(this.topic); }), 'primary'); start.disabled = !this.bridge || (!this.running && !this.sources.length); footer.append(controls, start); composer.append(footer); content.append(composer);
     const chips = el('div', 'chips'); for (const query of ['AI 编程工具', '开源笔记软件', '新能源出行', 'Claude 与 ChatGPT 对比']) chips.append(button(query, () => { this.topic = query; this.render(); }, 'chip')); content.append(chips);
     if (this.bridge && !this.configured) content.append(el('div', 'note warning', '可先浏览公开资料。生成 AI 研究报告前，请到 EdgeEver「个人中心 → AI 设置」选择默认模型；已配置用户无需重复填写密钥。'));
     else if (this.configured) content.append(el('div', 'tiny', `● 沿用 EdgeEver AI 配置${this.modelName ? ` · ${this.modelName}` : ''}`));

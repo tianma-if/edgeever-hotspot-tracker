@@ -75,3 +75,50 @@ test('history and source filters only change displayed results', async () => {
   expect(root.querySelector('[aria-label="搜索研究历史"]') === search).toBe(true); search.value = ''; search.dispatchEvent(new dom.Event('input') as unknown as Event); expect(root.querySelectorAll('.card-title').length).toBe(1);
   close(); app.dispose(); container.remove();
 });
+
+test('native defaults refresh on panel reopen while runs and watches keep their own settings', async () => {
+  const fixture = host(); const values: Record<string, string | boolean> = { 'default.days': '7', 'default.depth': 'quick', 'source.hackernews': false, 'source.github': false, 'source.reddit': false };
+  fixture.context.settings = { get: async key => values[key] ?? null };
+  const app = new TrackerApp(fixture.context); await app.init();
+  const container = document.createElement('div'); document.body.append(container); let close = app.mount(container); let root = container.firstElementChild!.shadowRoot!;
+  expect(root.querySelector('textarea')).toBeNull(); // Do not race the asynchronous defaults read.
+  await until(() => Boolean(root.querySelector('textarea')));
+  expect(root.querySelector<HTMLSelectElement>('[aria-label="研究时间范围"]')!.value).toBe('7');
+  expect(root.querySelector<HTMLSelectElement>('[aria-label="研究深度"]')!.value).toBe('quick');
+  expect(root.querySelectorAll('.source-tile input:checked').length).toBe(1);
+  const depth = root.querySelector<HTMLSelectElement>('[aria-label="研究深度"]')!; depth.value = 'standard'; depth.dispatchEvent(new dom.Event('change') as unknown as Event);
+  const topic = root.querySelector('textarea')!; topic.value = 'AI'; topic.dispatchEvent(new dom.Event('input') as unknown as Event);
+  findButton(root, '开始研究 ↗').click(); await until(() => app.store.state.runs[0]?.status === 'complete');
+  findButton(root, '追踪这个话题').click(); await until(() => app.store.state.watches.length === 1);
+  expect(values['default.depth']).toBe('quick');
+  values['default.days'] = '90'; values['default.depth'] = 'deep'; values['source.github'] = true;
+  close(); close = app.mount(container); root = container.firstElementChild!.shadowRoot!;
+  findButton(root, '开始研究').click(); await until(() => Boolean(root.querySelector('textarea')));
+  expect(root.querySelector<HTMLSelectElement>('[aria-label="研究时间范围"]')!.value).toBe('90');
+  expect(root.querySelector<HTMLSelectElement>('[aria-label="研究深度"]')!.value).toBe('deep');
+  expect(root.querySelectorAll('.source-tile input:checked').length).toBe(2);
+  const run = app.store.state.runs[0]; const watch = app.store.state.watches[0];
+  for (const record of [run, watch]) { expect(record.days).toBe(7); expect(record.depth).toBe('standard'); expect(record.sources).toEqual(['news']); }
+  expect(watch.scheduled).toBe(false); close(); app.dispose(); container.remove();
+});
+
+test('all-disabled native sources block research until the user chooses a source', async () => {
+  const fixture = host(); fixture.context.settings = { get: async key => key.startsWith('source.') ? false : null };
+  const app = new TrackerApp(fixture.context); await app.init(); const container = document.createElement('div'); document.body.append(container); const close = app.mount(container); const root = container.firstElementChild!.shadowRoot!;
+  await until(() => Boolean(root.querySelector('textarea')));
+  expect(root.textContent).toContain('默认来源全部关闭'); expect(findButton(root, '开始研究 ↗').disabled).toBe(true);
+  root.querySelector<HTMLInputElement>('[aria-label="检索GitHub"]')!.click(); expect(findButton(root, '开始研究 ↗').disabled).toBe(false);
+  expect(root.querySelectorAll('.source-tile input:checked').length).toBe(1); expect(app.store.state.runs).toHaveLength(0);
+  close(); app.dispose(); container.remove();
+});
+
+test('a closed panel cannot apply a late settings read to its replacement', async () => {
+  const fixture = host(); let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }); let first = true;
+  fixture.context.settings = { get: async key => { const stale = first; if (stale) await gate; return key === 'default.days' ? (stale ? '7' : '90') : null; } };
+  const app = new TrackerApp(fixture.context); await app.init(); const container = document.createElement('div'); document.body.append(container); const close = app.mount(container);
+  await new Promise(resolve => setTimeout(resolve, 0)); close(); first = false;
+  const closeAgain = app.mount(container); const root = container.firstElementChild!.shadowRoot!; await until(() => Boolean(root.querySelector('textarea')));
+  release(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(root.querySelector<HTMLSelectElement>('[aria-label="研究时间范围"]')!.value).toBe('90');
+  closeAgain(); app.dispose(); container.remove();
+});
