@@ -34,7 +34,7 @@ Deadlines: AI status ten seconds, planning thirty, relevance forty-five, sources
 
 ## UI, migration, and verification
 
-`src/ui.ts` presents the subscription summary, generate now, pause/resume, refresh settings, and recent results. There is no research composer, depth/source selection, or per-topic schedule management. Evidence and coverage are collapsed details. DOMPurify and marked safely render reports; excerpts are plain text. Shadow DOM isolates styles.
+`src/ui.ts` presents the subscription summary, generate now, pause/resume, refresh settings, and recent results, following EdgeEver's native page hierarchy for the title, setting summary, actions, and list. Ordinary configuration remains host-rendered from the manifest; the panel does not duplicate the settings form. There is no research composer, depth/source selection, or per-topic schedule management. Evidence and coverage are collapsed details. DOMPurify and marked safely render reports; excerpts are plain text. Shadow DOM isolates styles.
 
 `src/store.ts` serializes device-local snapshots. Storage remains version 1 with optional additions: `Run.digest`, `Evidence.interests`, `digestPaused`, and `digestNotes`. No destructive migration is performed. Startup removes legacy watch schedules individually and marks each unscheduled only after success. Failures preserve the marker, block the new schedule, and retry later. Old research, watch records, comparison URLs, and follow-ups remain intact; they are not silently subscribed. Abandoned active runs still become interrupted.
 

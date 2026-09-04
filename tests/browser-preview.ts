@@ -17,8 +17,9 @@ for (const field of manifest.settings.fields) {
 }
 const save = document.createElement('button'); save.type = 'submit'; save.textContent = '保存模拟设置'; form.append(save);
 const narrow = document.createElement('button'); narrow.type = 'button'; narrow.textContent = '窄屏预览';
-narrow.onclick = () => { const isNarrow = panel.style.width === '390px'; panel.style.width = isNarrow ? '100%' : '390px'; narrow.textContent = isNarrow ? '窄屏预览' : '宽屏预览'; }; form.append(narrow);
-const dark = document.createElement('button'); dark.type = 'button'; dark.textContent = '深色预览'; dark.onclick = () => panel.contentDocument?.documentElement.classList.toggle('dark'); form.append(dark);
+narrow.onclick = () => { const isNarrow = panel.style.width === '390px'; panel.style.width = isNarrow ? '100%' : '390px'; narrow.textContent = isNarrow ? '窄屏预览' : '宽屏预览'; };
+const dark = document.createElement('button'); dark.type = 'button'; dark.textContent = '深色预览'; dark.onclick = () => panel.contentDocument?.documentElement.classList.toggle('dark');
+const previewActions = document.createElement('div'); previewActions.className = 'preview-actions'; previewActions.append(narrow, dark); form.append(previewActions);
 form.onsubmit = event => { event.preventDefault(); for (const field of fields) f.settings[field.name] = field.value; status.textContent = '模拟设置已保存，等待插件轮询应用（约 30 秒），也可点击刷新设置。'; };
 const create = f.host.notes.create;
 f.host.notes.create = async input => { const note = await create(input); status.textContent = `已生成 ${f.notes.length} 篇模拟笔记，最近标题：${input.title}`; return note; };

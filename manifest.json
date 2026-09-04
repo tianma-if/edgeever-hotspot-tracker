@@ -31,7 +31,7 @@
         "key": "digest.interests",
         "type": "text",
         "label": "关注领域",
-        "description": "用逗号分隔，最多 5 个领域，每个不超过 60 字。填写并保存后自动生成；留空停止。",
+        "description": "用逗号、顿号或换行分隔，最多 5 个；留空时停止自动生成。",
         "placeholder": "例如：AI、独立开发、科技产品",
         "default": ""
       },
@@ -39,7 +39,7 @@
         "key": "digest.frequency",
         "type": "select",
         "label": "生成频率",
-        "description": "日报：每日 09:00；周报：每周一 09:00（设备时区）。自动存入收件箱，无收件箱时使用第一个笔记本。保存后约 30 秒内应用；仅在 EdgeEver 桌面端运行时执行，错过不补跑。模型调用沿用 EdgeEver AI 配置并按供应商计费。",
+        "description": "日报每日 09:00，周报每周一 09:00；均按设备时区执行。",
         "default": "weekly",
         "required": true,
         "options": [
