@@ -32,7 +32,17 @@ export class TrackerApp {
     const mount = el('div'); mount.style.height = '100%'; container.append(mount);
     const root = mount.attachShadow({ mode: 'open' }); this.root = root; this.render();
     void this.service.refresh().catch(() => {});
-    return () => { mount.remove(); if (this.root === root) this.root = undefined; };
+    const onFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void this.service.refresh().catch(() => {});
+    };
+    if (typeof window !== 'undefined') window.addEventListener('focus', onFocus);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onFocus);
+      mount.remove(); if (this.root === root) this.root = undefined;
+    };
   }
   dispose() { this.service.dispose(); this.root = undefined; }
   private async safely(action: () => Promise<unknown>) {
@@ -69,7 +79,9 @@ export class TrackerApp {
     const card = el('section', 'card preferences'); card.setAttribute('aria-label', '当前订阅设置');
     const heading = el('div', 'section-heading'); const headingCopy = el('div');
     headingCopy.append(el('h2', '', '自动热点笔记'), el('p', 'section-description', '配置由 EdgeEver 插件设置统一管理。'));
-    heading.append(headingCopy, el('span', 'badge', service.loading ? '读取设置中' : this.store.state.digestPaused ? '已暂停' : service.scheduleActive ? '自动生成已开启' : '自动生成未开启')); card.append(heading);
+    const badgeText = service.loading ? '读取设置中' : this.store.state.digestPaused ? '已暂停' : service.scheduleActive ? '自动生成已开启' : '自动生成未开启';
+    const badgeClass = service.loading ? 'badge badge-loading' : this.store.state.digestPaused ? 'badge badge-paused' : service.scheduleActive ? 'badge badge-active' : 'badge badge-inactive';
+    heading.append(headingCopy, el('span', badgeClass, badgeText)); card.append(heading);
     if (settings.interests.length) {
       const summary = el('dl', 'setting-summary');
       const interestsRow = el('div', 'setting-row'); interestsRow.append(el('dt', '', '关注领域'));
@@ -77,7 +89,12 @@ export class TrackerApp {
       const frequencyRow = el('div', 'setting-row'); frequencyRow.append(el('dt', '', '生成频率'), el('dd', '', `${frequencyName(settings.frequency)} · ${scheduleLabel(settings.frequency)}`));
       summary.append(interestsRow, frequencyRow); card.append(summary);
     } else {
-      const emptySetup = el('div', 'setup'); emptySetup.append(el('strong', '', '尚未设置关注领域'), el('p', '', '前往「插件市场 → 热点追踪 → 插件设置」填写领域并选择生成频率。')); card.append(emptySetup);
+      const emptySetup = el('div', 'setup'); emptySetup.append(el('strong', '', '尚未设置关注领域'), el('p', '', '前往「插件市场 → 热点追踪 → 插件设置」填写领域并选择生成频率。'));
+      const suggestions = el('div', 'empty-suggestions'); suggestions.append(el('span', 'tiny', '推荐关注示例：'));
+      const chips = el('div', 'chips');
+      ['AI · 大模型', '独立开发与出海', '前端前沿', '开源生态', '科技商业'].forEach(topic => chips.append(el('span', 'chip suggestion-chip', topic)));
+      suggestions.append(chips); emptySetup.append(suggestions);
+      card.append(emptySetup);
     }
     const actions = el('div', 'actions');
     const generate = button(service.running ? '查看生成进度' : '立即生成', () => this.safely(async () => {
@@ -93,7 +110,7 @@ export class TrackerApp {
       pause.disabled = this.busy; actions.append(pause);
     }
     const refresh = button('刷新设置', () => this.safely(() => service.refresh()), 'text-btn'); refresh.disabled = this.busy; actions.append(refresh);
-    card.append(actions, el('p', 'card-footnote', '设置保存后约 30 秒内应用；也可以手动刷新。默认保存到收件箱，无收件箱时使用第一个笔记本。')); content.append(card);
+    card.append(actions, el('p', 'card-footnote', '设置保存后约 30 秒内应用，切换回面板时自动同步；也可以手动刷新。默认保存到收件箱，无收件箱时使用第一个笔记本。')); content.append(card);
     if (!this.host.network) content.append(el('p', 'notice', '当前 EdgeEver 未提供插件网络访问能力，请升级兼容版本。'));
     if (!this.host.ai) content.append(el('p', 'notice', '当前宿主未提供通用 AI 能力，只能生成明确标注的资料汇总。'));
     content.append(el('p', 'footnote', '自动生成仅在 EdgeEver 桌面端运行时执行，错过不补跑。沿用 EdgeEver 默认 AI 模型，调用按供应商计费。'));

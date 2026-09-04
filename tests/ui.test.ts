@@ -51,3 +51,20 @@ test('legacy history remains accessible and cannot create new watch tasks', asyn
   f.values.set('research-state-v1', { version: 1, runs: [run], watches: [] }); const { root } = await mount(f);
   findButton(root, 'Legacy report').click(); expect(root.textContent).toContain('Previous content'); expect(findButton(root, '追踪这个话题')).toBeUndefined();
 });
+test('preferences card distinguishes status badges, offers empty suggestions, and auto-refreshes on window focus', async () => {
+  const f = fixture(); f.settings['digest.interests'] = '';
+  const { root } = await mount(f);
+  expect(root.querySelector('.badge-inactive')?.textContent).toBe('自动生成未开启');
+  expect(root.querySelector('.empty-suggestions')).not.toBeNull();
+  expect(root.textContent).toContain('AI · 大模型');
+
+  f.settings['digest.interests'] = '云原生架构';
+  window.dispatchEvent(new dom.window.Event('focus'));
+  await until(() => Boolean(root.querySelector('.badge-active')));
+  expect(root.querySelector('.badge-active')?.textContent).toBe('自动生成已开启');
+  expect(root.textContent).toContain('云原生架构');
+
+  findButton(root, '暂停自动生成').click();
+  await until(() => root.querySelector('.badge-paused')?.textContent === '已暂停');
+});
+

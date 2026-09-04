@@ -31,7 +31,7 @@
         "key": "digest.interests",
         "type": "text",
         "label": "关注领域",
-        "description": "用逗号、顿号或换行分隔，最多 5 个；留空时停止自动生成。",
+        "description": "用逗号、顿号分隔或直接粘贴多行，最多 5 个；留空时停止自动生成。",
         "placeholder": "例如：AI、独立开发、科技产品",
         "default": ""
       },
