@@ -57,11 +57,11 @@ No topic, source, date window, evidence schema or report fields enter the host A
 
 ## Verification and release boundary
 
-The v0.5.0-preview.1 working tree reuses the same generic capabilities for daily/weekly orchestration, with no new host API. Settings contain interest text and cadence; the plugin polls every 30 seconds because the host has no settings-change event. Scheduling uses existing cron APIs and notes use existing creation APIs. Settings subscriptions, idempotent note creation, and cross-device scheduling coordination are future generic capability proposals, not current features. Synthetic-host tests verify the new UI and scheduling logic, not an actual desktop clock; the live evidence below belongs to the earlier v0.4 integration.
+The v0.5.0-preview.1 release reuses the same generic capabilities for daily/weekly orchestration, with no new host API. Settings contain interest text and cadence; the plugin polls every 30 seconds because the host has no settings-change event. Scheduling uses existing cron APIs and notes use existing creation APIs. Settings subscriptions, idempotent note creation, and cross-device scheduling coordination are future generic capability proposals, not current features. Synthetic-host tests verify the new UI and scheduling logic, not an actual desktop clock; the live evidence below belongs to the earlier v0.4 integration.
 
 Deterministic tests cover all four source adapters, AI delegation, denied permissions, declared-host enforcement, upstream errors, size limits, cancellation, DNS address validation, native settings and UI behavior. The browser integration run retrieved 11 real items from news/HN, generated a cited AI report, successfully retried generation from retained evidence, and saved the report as a note. GitHub/Reddit contributed zero items to that run; this is not evidence of successful live content retrieval from those two sources. Self-hosted DNS policy tests passed, but a positive TLS smoke test on this machine was blocked by its reserved fake-IP DNS response. Cloudflare development transport was used for the browser run.
 
-Official host release and production Web/desktop verification remain gates for stable availability. The v0.4.0 package is published as a prerelease for compatible development hosts and does not promise compatibility with older production versions.
+Official host release and production Web/desktop verification remain gates for stable availability. The v0.5.0-preview.1 package is published as a prerelease for compatible development hosts and does not promise compatibility with older production versions.
 
 ## Retired integration
 

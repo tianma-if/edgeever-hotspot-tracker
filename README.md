@@ -33,9 +33,9 @@ The plugin never reads browser cookies or receives AI provider keys. Search keyw
 
 ## Upgrade and installation status
 
-**Current working tree: v0.5.0-preview.1, not yet released.** This revision replaces the research workbench with a daily/weekly subscription. Upgrades retain old research and watch records, retiring old per-topic schedules before enabling the unified schedule. Cleanup failures are shown and retried. Old source/depth defaults are no longer used; old topics are not silently subscribed. Enter your interests again.
+**Current preview: [v0.5.0-preview.1](https://github.com/tianma-if/edgeever-hotspot-tracker/releases/tag/v0.5.0-preview.1).** This revision replaces the research workbench with a daily/weekly subscription. Upgrades retain old research and watch records, retiring old per-topic schedules before enabling the unified schedule. Cleanup failures are shown and retried. Old source/depth defaults are no longer used; old topics are not silently subscribed. Enter your interests again.
 
-The published [v0.4.0 preview](https://github.com/tianma-if/edgeever-hotspot-tracker/releases/tag/v0.4.0) does not contain this simplification. The plugin still requires the host's generic `ai:generate` and `network:public` capabilities; see the [host capability contract](docs/host-capabilities.md). Those capabilities are implemented in the local development host; official release and production verification remain prerequisites for stable installation. Older production hosts may reject the permissions. Keep this a preview, do not patch EdgeEver, and do not use retired v0.1–v0.3 injection workflows.
+The plugin still requires the host's generic `ai:generate` and `network:public` capabilities; see the [host capability contract](docs/host-capabilities.md). Those capabilities are implemented in the local development host; official release and production verification remain prerequisites for stable installation. Older production hosts may reject the permissions. Keep this a preview, do not patch EdgeEver, and do not use retired v0.1–v0.3 injection workflows.
 
 ## Development
 

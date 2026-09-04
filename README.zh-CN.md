@@ -33,9 +33,9 @@
 
 ## 升级与安装状态
 
-**当前工作树：v0.5.0-preview.1，尚未发布。** 此次将研究工作台简化为日报／周报订阅。升级后保留旧研究与追踪数据，先停用旧的逐话题计划，再启用统一计划；失败会提示并重试。旧版来源／深度默认设置不再使用，也不会擅自把旧话题变成新订阅，请重新填写关注领域。
+**当前预览版：[v0.5.0-preview.1](https://github.com/tianma-if/edgeever-hotspot-tracker/releases/tag/v0.5.0-preview.1)。** 此次将研究工作台简化为日报／周报订阅。升级后保留旧研究与追踪数据，先停用旧的逐话题计划，再启用统一计划；失败会提示并重试。旧版来源／深度默认设置不再使用，也不会擅自把旧话题变成新订阅，请重新填写关注领域。
 
-已发布的 [v0.4.0 预览包](https://github.com/tianma-if/edgeever-hotspot-tracker/releases/tag/v0.4.0) 不包含此次简化。插件仍需要宿主提供通用 `ai:generate` 与 `network:public` 能力，参见[通用宿主 API 契约](docs/host-capabilities.zh-CN.md)。这些能力在本地开发宿主实现，正式发布与生产验证仍是稳定安装的前提；旧生产宿主可能拒绝清单权限。保持预览状态，不修改 EdgeEver 源码，不使用 v0.1–v0.3 的废弃注入方案。
+插件仍需要宿主提供通用 `ai:generate` 与 `network:public` 能力，参见[通用宿主 API 契约](docs/host-capabilities.zh-CN.md)。这些能力在本地开发宿主实现，正式发布与生产验证仍是稳定安装的前提；旧生产宿主可能拒绝清单权限。保持预览状态，不修改 EdgeEver 源码，不使用 v0.1–v0.3 的废弃注入方案。
 
 ## 开发
 

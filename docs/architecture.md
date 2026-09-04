@@ -42,4 +42,4 @@ Deterministic tests cover settings, cadence changes, deduplication, pause, save 
 
 ## Host boundary
 
-Only generic network, AI, settings, storage, notes, and scheduling capabilities are used. `ResearchBridge`, source types, interest structures, prompts, and report orchestration remain plugin-internal. No host research routes, source-specific SDK types, or second service are introduced. Generic network/AI capabilities must still ship officially before stable installation; see the [capability contract](host-capabilities.md). This working tree is an unreleased preview and does not modify the EdgeEver checkout.
+Only generic network, AI, settings, storage, notes, and scheduling capabilities are used. `ResearchBridge`, source types, interest structures, prompts, and report orchestration remain plugin-internal. No host research routes, source-specific SDK types, or second service are introduced. Generic network/AI capabilities must still ship officially before stable installation; see the [capability contract](host-capabilities.md). v0.5.0-preview.1 remains a preview and does not modify the EdgeEver checkout.
