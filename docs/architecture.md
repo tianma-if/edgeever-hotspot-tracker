@@ -2,54 +2,44 @@
 
 [简体中文](architecture.zh-CN.md)
 
-```mermaid
-flowchart LR
-  U[Topic and time window] --> P[Plugin planner]
-  P --> H[Generic host network transport]
-  H --> N[News / HN / GitHub / Reddit]
-  N --> F[Plugin parses, date-filters, deduplicates]
-  F --> R[Relevance filter and evidence IDs]
-  R --> A[Existing default AI model]
-  A --> C[Citation checks and safe rendering]
-  C --> S[Device history / saved EdgeEver note]
-```
+## Two settings, one note
 
-## Responsibilities
+Native settings declare only `digest.interests` (text) and `digest.frequency` (daily/weekly). Empty interests do not start work. Sources and depth are internal: all four sources, standard research.
 
-`src/sources.ts` runs inside the plugin bundle. Every request uses the injected `context.network.fetch`; there is no implicit global fetch, research endpoint, or separate backend. Adapters choose fixed HTTPS destinations, reject redirects, limit responses to 2 MB, and use a 20-second deadline. The plugin parses XML/JSON and produces its own evidence records. Public transport avoids browser CORS restrictions; source access restrictions and rate limits still apply.
+`src/settings.ts` reads both fields with a five-second deadline, parses Chinese/English separators, deduplicates, and limits input to five interests of 60 characters each. Invalid/unreadable settings stop automatic generation instead of guessing interests or cadence. Missing settings capability is explained as requiring a compatible host.
 
-`src/engine.ts` owns research orchestration. Quick mode sends one query to the selected sources (six hits each). All four sources are selected by default. Standard and deep modes ask the default model for up to two or three queries respectively (ten hits per source/query). Requests run in pairs. Optional Hacker News comment enrichment adds up to two requests per query. Selection is capped at 40 evidence items.
+`src/digest.ts` registers the unified `generate-digest` command at activation, without waiting for a panel to open. Settings are read at activation, panel mount, manual refresh, before execution, and every 30 seconds. The host has no settings-change notification, so no unimplemented event API is assumed. Reads and schedule reconciliation are serialized; unchanged schedules are not rewritten. Deactivation clears timers, commands, and requests.
 
-Ranking combines reciprocal source rank and query-token overlap. It reserves representatives from available sources and does not compare unlike platform engagement counts. Standard/deep runs apply one semantic relevance pass to all surviving items, including sparse results. The original topic is always retained as one query to prevent planner drift. Unknown IDs or invalid JSON fall back to local relevance. Planning failure falls back to the original topic. No model means evidence-only output.
+## Scheduling and saving
 
-Each item retains its original URL, publication time where available, source, excerpt, and coverage label. Query parameters used for tracking are removed for deduplication. Old/future timestamps are excluded; undated evidence stays explicitly undated. A generated `[E12]` citation can only link to a collected `E12`. This validates provenance, not semantic entailment or factual truth. Reports instruct the model to attribute headline claims rather than invent article details.
+Existing `schedules.upsert/remove` APIs manage the stable `hotspot-digest` key. Daily uses `0 9 * * *`; weekly uses `0 9 * * 1`, in the device timezone, skipping missed runs. Frequency changes update that same schedule. Pause state is stored locally; blank interests or invalid settings remove the schedule. Sync failures are shown and retried, never presented as successfully enabled. Execution requires a running desktop app, not a separate background research service.
 
-`src/ui.ts` uses a Shadow DOM panel, DOMPurify, and marked. Source excerpts are plain text. Images and embedded interactive content are excluded from displayed reports. Closing the panel keeps an active run alive; cancellation or plugin deactivation aborts requests. On reopening the app, abandoned active runs are labeled interrupted, not silently resumed.
+Windows are the preceding 24 hours or 7×24 hours as of generation start, not complete calendar-day/week archives. Issue deduplication uses the local calendar date or Monday-starting week. Manual and scheduled generation share a mutual-exclusion path and reuse saved issues. Manual generation can occupy the current issue early; the scheduled time does not create another note. Interest edits do not regenerate an already saved issue.
 
-`src/store.ts` serializes local snapshots. Notes use host `notes.create`, and repeat saves open the existing note. Follow-up answers added later are retained in history and new exports; an already saved note is a snapshot and is not silently overwritten. Watchlists use stable command IDs and the existing desktop scheduler. Daily runs retain the tracked sources and depth; legacy watches default to all sources and standard depth; only runs with evidence replace the comparison baseline. “New evidence” counts different retrieved URLs, not newly occurring events.
+All interests belong to one Run and one note. After completion, `notebooks.list` selects `nb_inbox` or the first notebook, and `notes.create` saves the result. Empty coverage still saves an explanatory note. Failed saves retain completed drafts; the next attempt retries saving only. Note IDs are retained in the Run and a separate index of up to four issues, so eviction from the 30-run history does not create duplicate issues. Deduplication is device-local.
+
+Closing the panel does not cancel work. Cancellation/deactivation aborts requests. Pausing or clearing settings cancels active automatic generation, not manual generation. Already dispatched `notes.create` calls have no generic cancellation contract and can still complete; a returned ID must be persisted. **The host does not provide idempotent note creation or an atomic note-create/plugin-state transaction**: a lost success response or process crash after creation can lead to duplicates on retry. Idempotent writes and settings subscriptions are future generic capability proposals, not assumed shipped APIs.
+
+## Search and reports
+
+`src/engine.ts` retains the generic research engine. Digests plan independently per interest, always retaining the original interest query and optionally adding one accurate English query. Each source/query returns at most ten hits, with at most two requests in flight; HN enrichment adds up to two comment requests. All transport is injected through `src/runtime.ts`; source query syntax and XML/JSON parsing in `src/sources.ts` ship with the plugin.
+
+Each interest is date- and lexically filtered, including English query expansions. Round-robin selection across interests caps evidence at 40 so a busy domain cannot crowd out others. Canonical URLs are deduplicated while retaining all matching interest labels. Digests exclude unknown, invalid, old, and future dates; legacy research retains its explicit undated labels. Ranking uses source position and keyword overlap, not incomparable cross-platform likes or claims of global trends.
+
+AI applies a semantic relevance pass, then produces one report grouped by every interest. It selects up to five changes per domain, explains what happened and why it matters, labels inferences, and never pads missing coverage. Source text is untrusted data, not instructions; headline excerpts must not be represented as full articles. Evidence IDs are globally unique within a Run; citations can only link to retrieved URLs. This verifies provenance, not factual correctness or entailment.
+
+Missing/failed AI produces grouped evidence explicitly labeled as not AI synthesis; empty evidence explains coverage limitations. Regeneration uses only original evidence, window, and interests without new searches. Failure/cancellation preserves the previous report. Saved notes are never overwritten; updated reports can be exported as Markdown.
+
+Deadlines: AI status ten seconds, planning thirty, relevance forty-five, sources thirty, and report generation ninety. Evidence sent to the model is capped at 40 IDs and roughly 56,000 characters, shortening long comments/excerpts. Provider-side billing cancellation remains provider-dependent.
+
+## UI, migration, and verification
+
+`src/ui.ts` presents the subscription summary, generate now, pause/resume, refresh settings, and recent results. There is no research composer, depth/source selection, or per-topic schedule management. Evidence and coverage are collapsed details. DOMPurify and marked safely render reports; excerpts are plain text. Shadow DOM isolates styles.
+
+`src/store.ts` serializes device-local snapshots. Storage remains version 1 with optional additions: `Run.digest`, `Evidence.interests`, `digestPaused`, and `digestNotes`. No destructive migration is performed. Startup removes legacy watch schedules individually and marks each unscheduled only after success. Failures preserve the marker, block the new schedule, and retry later. Old research, watch records, comparison URLs, and follow-ups remain intact; they are not silently subscribed. Abandoned active runs still become interrupted.
+
+Deterministic tests cover settings, cadence changes, deduplication, pause, save retry, migration, failed sources, dates, fair domain coverage, and UI safety. Browser checks use an explicit synthetic host for interaction/layout verification, with no real model calls or note writes. They do not establish desktop clock execution or production host integration.
 
 ## Host boundary
 
-`src/runtime.ts` builds an internal `ResearchBridge` from `context.network.fetch` and generic `context.ai.status/generate`. `ResearchBridge`, `SearchInput`, `Evidence`, platform lists, and report prompts are plugin-internal types and must not be exported by the host SDK. There is no `context.research` dependency.
-
-The generic AI and public network contracts are implemented in the local EdgeEver development tree but have not shipped. The manifest declares `ai:generate`, `network` and `network:public`; older hosts that do not recognize these permissions reject installation. Runtime fallback without AI does not bypass manifest validation. Requests explicitly choose `transport: "public"`; ordinary browser fetch remains available for other plugins. See the [generic capability contract](host-capabilities.md) for limits and verification status.
-
-Settings, saved notes, schedules and model credentials belong to the existing generic host services. Source queries, parsing, relevance, citations, watch comparison and report structure belong to the plugin. The removed `integration/` implementations and injection script are not part of this architecture.
-
-## Useful boundaries for the next version
-
-Add richer source adapters only after defining access, rate limits, and truthful coverage labels. Persistent server-side scheduling requires a separate product decision; current schedules intentionally use EdgeEver's desktop runtime. Local history is bounded and device-specific. Watchlists retain up to 40 baseline URLs separately so history eviction does not erase the next comparison. Large-scale relevance evaluation and entailment verification are future work; this version tests provenance, degraded sources, cancellation, permissions, and UI safety.
-
-## Recovery and report limits
-
-`src/requests.ts` enforces client deadlines even when a provider ignores cancellation: AI status 10 seconds, planning 30 seconds, relevance 45 seconds, source requests 30 seconds, and report/follow-up generation 90 seconds. Timeouts abort the child signal and release the waiting UI. Server/provider billing cancellation remains provider-dependent.
-
-Report regeneration only reads existing evidence. It neither reruns search nor changes the original research date/window. A failed or cancelled attempt leaves the prior report and note reference intact. Saved notes remain snapshots. Evidence passed to AI is capped at 40 IDs within roughly 56,000 characters; comments and long summaries are shortened before evidence IDs are dropped. The follow-up context also bounds previous answers. English relevance tokens use word boundaries so “AI” does not match “chair”.
-
-Source/depth preferences, report kind, and watch comparison URLs are optional additions to storage version 1. Older runs remain readable without a destructive migration. An empty new source selection is rejected. UI filters only change the display, never saved evidence or exported report coverage.
-
-## Native settings
-
-`manifest.json` declares six fields rendered by EdgeEver: `default.days`, `default.depth`, and `source.news` / `source.hackernews` / `source.github` / `source.reddit`. `src/settings.ts` reads `context.settings.get` with a five-second deadline and validates against the manifest. The manifest also owns fallback defaults; each failed or invalid field falls back with a visible warning. All-disabled sources remain disabled and block a new run until the user selects a source.
-
-Every panel mount reloads defaults before exposing the research form. Reads from closed panels cannot update a newer panel, and deactivation cancels the wait. Per-panel overrides never write settings; recorded runs and watches remain snapshots. No storage migration, new permission, credential, schedule, or backend deployment is introduced. Hosts lacking `context.settings` keep the previous behavior.
+Only generic network, AI, settings, storage, notes, and scheduling capabilities are used. `ResearchBridge`, source types, interest structures, prompts, and report orchestration remain plugin-internal. No host research routes, source-specific SDK types, or second service are introduced. Generic network/AI capabilities must still ship officially before stable installation; see the [capability contract](host-capabilities.md). This working tree is an unreleased preview and does not modify the EdgeEver checkout.

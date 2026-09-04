@@ -1,77 +1,60 @@
-# EdgeEver Hotspot Tracker · 热点追踪
+# EdgeEver Hotspot Tracker
 
 [简体中文](README.zh-CN.md) · [Architecture](docs/architecture.md)
 
-Research a topic, compare recent developments, and keep a cited report in EdgeEver. No Last30Days installation, Python environment, Docker sidecar, or separate research service.
+Choose your interests and a daily or weekly cadence. Receive one sourced hotspot note per issue, without another research service or a new API key.
 
-**Status: v0.4.0 preview release.** Source requests, parsing, ranking, and report orchestration live in the plugin bundle. EdgeEver's local development implementation now provides generic AI generation and public HTTPS transport, with no research-specific host routes or installation patches. Browser integration retrieved real evidence, generated a cited report, and recovered a failed generation using retained evidence. These generic APIs still need to ship in an official EdgeEver version before ordinary installation is supported.
+## Getting started
 
-See the [generic host API contract](docs/host-capabilities.md). Earlier v0.1–v0.3 previews used a dedicated host integration; that architecture is superseded. Do not apply those integration patches.
+Open **Plugin Marketplace → Hotspot Tracker → Plugin settings** and configure just two fields:
 
-## Changed in 0.4
+- **Interests**: for example, `AI, indie development, technology products`. Separate with commas, Chinese punctuation, or newlines. Up to five interests, 60 characters each; leave blank to stop automatic generation.
+- **Frequency**: daily at 09:00, covering the previous day; or weekly on Monday at 09:00, covering the previous seven days. Both use the device timezone.
 
-- Bundle all four public-source adapters and parsers with the plugin, using generic `context.network.fetch` and four declared destination hosts.
-- Remove the `research:search` permission, host source contracts, research routes, client adapter, and source-injection script.
-- Keep prompts, query planning, relevance filtering, and reports entirely in the plugin. Only general-purpose model invocation belongs in the host.
-- If a source cannot be read, report incomplete coverage. There is no fallback through hidden host routes, browser cookies, or third-party proxies.
+The initial default is weekly with no interests, so nothing starts automatically. Saved settings apply within approximately 30 seconds, even if the plugin panel has never opened. No preliminary research run or watchlist setup is needed. Sources, time window, and research depth are managed internally.
 
-## New in 0.3: native plugin settings
+Each issue creates one note grouped by interest, explaining what happened and why it matters, with source links. Notes go to the inbox (`nb_inbox`), or the first available notebook if there is no inbox. If no notebook exists or saving fails, the result remains in the plugin for a save retry.
 
-Open **Plugin Marketplace → Hotspot Tracker → Plugin settings**, or use the plugin tools menu. Set the default time range (7/30/90 days), research depth, and four source switches there. Defaults are 30 days, standard depth, and all four sources.
+The panel shows recent results, **Generate now**, and **Pause/resume automatic generation**. Manual generation also saves automatically and remains available while paused. On the current device, an existing note for the same issue is reused without repeating searches or creating duplicates. Daily issues use the local date; weekly issues use the week starting Monday. Interest edits apply to the next issue; switching cadence uses the corresponding daily/weekly issue.
 
-Settings stay on the current device. Close and reopen the research panel to apply them; temporary choices in the panel last until it closes. Saved runs and existing watches keep their original choices. If all default sources are disabled, choose at least one source before starting. Settings do not enable schedules or require another API key.
+**Automatic generation requires EdgeEver desktop to remain running. Closing the app stops execution; missed runs are skipped.** Settings and run records are device-local, with no global cross-device deduplication. Closing the panel does not cancel an active run; cancellation and plugin deactivation stop requests.
 
-Hosts without the settings API retain the previous controls and defaults. Failed/invalid settings reads fall back with an explanation; hosts still need the research capabilities described above.
+## Notes and evidence boundaries
 
-## New in 0.2
+- Search news, Hacker News, public GitHub issues/PRs, and Reddit public feeds independently for each interest, then filter and deduplicate.
+- Digests include only dated evidence inside the issue's rolling time window. Search coverage is limited and is not a global popularity ranking.
+- AI uses EdgeEver's default model and the user's provider billing. Missing configuration or generation failure produces an explicitly labeled evidence digest, not a claimed AI synthesis.
+- Missing domain coverage and failed sources are disclosed, without padding or assuming nothing happened. An issue with no evidence still saves an explanatory insufficient-evidence note.
+- News and Reddit primarily provide headlines/excerpts, not full articles or complete comment trees. HN adds up to three comments for each of the first two results per query. GitHub supplies issue/PR bodies and comment counts, not comment bodies.
+- Open the saved note, export Markdown, or regenerate from existing evidence. Saved notes remain original snapshots; regeneration does not overwrite them, and updated results can be exported.
+- Citations trace back to retrieved links but do not establish factual correctness. Check important conclusions against originals.
 
-- Choose the sources for each research run. Watchlists remember the original sources and depth; existing watchlists keep all sources and standard depth.
-- Generate or regenerate the AI report from existing evidence without another search. A failed or cancelled retry preserves the previous report.
-- Filter history by topic and evidence by source. Reports show headline-only and unknown-date counts; evidence-only runs are labeled separately.
-- Bounded requests prevent endless waiting. If AI configuration is temporarily unavailable, public evidence is still collected.
-- Watchlists retain their comparison links after older research leaves the 30-run history. Different source/depth combinations can be tracked separately.
+The plugin never reads browser cookies or receives AI provider keys. Search keywords go to public sources through generic host networking; interests and excerpts go to the configured AI provider. The latest 30 results remain on the device; automatically saved notes use normal workspace synchronization. Plugins run in a trusted client environment, not a hard JavaScript sandbox.
 
+## Upgrade and installation status
 
-## What it does
+**Current working tree: v0.5.0-preview.1, not yet released.** This revision replaces the research workbench with a daily/weekly subscription. Upgrades retain old research and watch records, retiring old per-topic schedules before enabling the unified schedule. Cleanup failures are shown and retried. Old source/depth defaults are no longer used; old topics are not silently subscribed. Enter your interests again.
 
-- Research the last 7, 30, or 90 days, with quick, standard, and deep modes.
-- Search news, Hacker News, public GitHub issues/PRs, and Reddit public feeds.
-- Plan short queries, deduplicate links, filter relevance, and generate a report with traceable citations using your existing EdgeEver default AI model.
-- Ask follow-up questions against the collected evidence, save the report as a note, or export Markdown/HTML.
-- Keep up to 30 research runs and 30 watched topics on this device. Compare newly retrieved links with the previous run.
-- Optionally run daily at 09:00 in the device timezone on desktop while EdgeEver is running, and archive results to a selected notebook. Scheduling is off by default; missed runs are skipped.
+The published [v0.4.0 preview](https://github.com/tianma-if/edgeever-hotspot-tracker/releases/tag/v0.4.0) does not contain this simplification. The plugin still requires the host's generic `ai:generate` and `network:public` capabilities; see the [host capability contract](docs/host-capabilities.md). Those capabilities are implemented in the local development host; official release and production verification remain prerequisites for stable installation. Older production hosts may reject the permissions. Keep this a preview, do not patch EdgeEver, and do not use retired v0.1–v0.3 injection workflows.
 
-News and Reddit supply headline/body excerpts, not full articles or complete comment trees. Hacker News adds up to three comments for each of the first two hits per query. GitHub provides issue/PR bodies and comment counts, not comment transcripts. A missing or limited source is visible in the report.
+## Development
 
-The first version does not include X, YouTube, TikTok, Instagram, automatic topicless discovery, an always-on crawler, or verified population-wide trend measurements. A citation confirms a retrieved source URL, not the truth of every generated claim. Statements and numbers still need judgment.
-
-## Installation status
-
-The preview package is available from [v0.4.0 Releases](https://github.com/tianma-if/edgeever-hotspot-tracker/releases/tag/v0.4.0). In a compatible development host, install its [manifest](https://github.com/tianma-if/edgeever-hotspot-tracker/releases/download/v0.4.0/manifest.json) through Plugin Marketplace. Current production hosts without the new permissions cannot install this version. After an EdgeEver release ships the generic capabilities, users will upgrade normally and reuse their existing AI settings, without source patches or another service.
-
-Without an AI model, the plugin still retrieves public evidence and clearly labels the result as evidence-only. Model usage is billed by your configured provider. The plugin adds no source API keys, but public source availability depends on the instance's network and source rate limits.
-
-The plugin runs in EdgeEver's trusted client plugin environment, not a hard JavaScript sandbox. This plugin uses permission-checked host methods; it does not request cookies or receive the AI provider key. Search keywords go to selected public sources through the generic host network transport; parsing and source-specific logic execute in the plugin. Your question and collected excerpts go to your configured AI provider. Research history and watchlists stay in device-local plugin storage; notes you explicitly save use normal workspace synchronization.
-
-## Develop
-
-Use Bun 1.3.14 or later. End users do not run these commands.
+Requires Bun 1.3.14 or later. End users do not need these commands.
 
 ```sh
 bun install --frozen-lockfile
 bun run check
-bun run test:live  # Bun transport smoke test only; does not verify browser CORS or host APIs
-bun run dev        # static development package server on 127.0.0.1:4178
+bun run test:live  # Bun source requests only, not host/browser integration
+bun run dev        # 127.0.0.1:4178, plugin package files only
+bun scripts/ui-preview.ts  # 127.0.0.1:4179, explicitly synthetic host UI verification
 ```
 
-Only install `http://127.0.0.1:4178/manifest.json` into a development host implementing the generic contracts. Older SDKs without `ai:generate` or `network:public` reject this manifest. `bun run dev` serves the compiled plugin only; it is not a research backend. Rebuild, reinstall the development manifest to refresh the cached package, and reload EdgeEver after changing the bundle.
+Install the development manifest at `http://127.0.0.1:4178/manifest.json` only in a compatible development host. Rebuild, install the updated package, and refresh the host after changes. The development server performs no research business logic.
 
-The build produces a single browser module plus `manifest.json`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt` in `dist/`. GitHub Releases distribute these files; the repository-root manifest must match the release manifest exactly. Tag builds are published as previews by the release workflow. CI runs deterministic tests and builds the bundle; it does not contact public sources or AI providers.
+Checks include types, deterministic tests, and a single-file build. Browser UI verification uses synthetic sources, AI, and note storage; it is not proof of live source or desktop clock integration. Build output includes `dist/main.js`, the manifest, and licenses. Release manifests must exactly match the root manifest, with a single entry JS bundle. Releases remain prereleases until compatible host capabilities ship.
 
-## Host boundary
+## Host boundary and license
 
-Only generic network, AI, settings, notes, storage, and scheduling APIs are used. `src/runtime.ts` connects these capabilities to plugin-owned adapters; `src/sources.ts` is bundled, never copied to EdgeEver. See [the capability contract](docs/host-capabilities.md) for limits and verification status. No script in this repository writes into a host checkout.
+Source requests, parsing, ranking, query planning, and report orchestration ship inside the plugin. Only generic network, AI, settings, storage, notes, and scheduling APIs are used. No source-specific host routes, SDK types, or research service are added.
 
-## License
-
-AGPL-3.0-or-later, consistent with EdgeEver. This is an independent TypeScript implementation inspired by Last30Days' multi-source research workflow; it does not bundle or invoke Last30Days. See [third-party notices](THIRD_PARTY_NOTICES.md) for dependencies.
+Licensed AGPL-3.0-or-later. Inspired by Last30Days' multi-source research approach, without bundling or invoking it. See [third-party notices](THIRD_PARTY_NOTICES.md).

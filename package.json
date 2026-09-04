@@ -1,9 +1,9 @@
 {
   "name": "edgeever-hotspot-tracker",
-  "version": "0.4.0",
+  "version": "0.5.0-preview.1",
   "private": true,
   "type": "module",
-  "description": "EdgeEver 热点追踪 — native research and watchlists without another service.",
+  "description": "EdgeEver 热点追踪 — daily or weekly interest digests, saved automatically as notes.",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "build": "bun scripts/build.ts",

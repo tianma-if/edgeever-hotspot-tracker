@@ -2,9 +2,9 @@
   "type": "plugin",
   "id": "org.edgeever.hotspot-tracker",
   "name": "EdgeEver 热点追踪",
-  "version": "0.4.0",
+  "version": "0.5.0-preview.1",
   "apiVersion": "1",
-  "description": "追踪你关心的话题，汇集最新资讯与社区观点，一键生成研究笔记。",
+  "description": "设置关注领域与日报／周报，定期将带来源的热点汇总保存为笔记。",
   "author": "EdgeEver",
   "entry": "./main.js",
   "platforms": [
@@ -28,74 +28,30 @@
   "settings": {
     "fields": [
       {
-        "key": "default.days",
+        "key": "digest.interests",
+        "type": "text",
+        "label": "关注领域",
+        "description": "用逗号分隔，最多 5 个领域，每个不超过 60 字。填写并保存后自动生成；留空停止。",
+        "placeholder": "例如：AI、独立开发、科技产品",
+        "default": ""
+      },
+      {
+        "key": "digest.frequency",
         "type": "select",
-        "label": "默认时间范围",
-        "description": "新研究默认检索多久以内的资料；打开研究面板后仍可临时调整。",
-        "default": "30",
+        "label": "生成频率",
+        "description": "日报：每日 09:00；周报：每周一 09:00（设备时区）。自动存入收件箱，无收件箱时使用第一个笔记本。保存后约 30 秒内应用；仅在 EdgeEver 桌面端运行时执行，错过不补跑。模型调用沿用 EdgeEver AI 配置并按供应商计费。",
+        "default": "weekly",
+        "required": true,
         "options": [
           {
-            "value": "7",
-            "label": "最近 7 天"
+            "value": "daily",
+            "label": "日报"
           },
           {
-            "value": "30",
-            "label": "最近 30 天"
-          },
-          {
-            "value": "90",
-            "label": "最近 90 天"
+            "value": "weekly",
+            "label": "周报"
           }
         ]
-      },
-      {
-        "key": "default.depth",
-        "type": "select",
-        "label": "默认研究深度",
-        "description": "更深入的研究会检索更多资料，耗时和模型用量也会增加。已有追踪任务保留原来的深度。",
-        "default": "standard",
-        "options": [
-          {
-            "value": "quick",
-            "label": "快速浏览"
-          },
-          {
-            "value": "standard",
-            "label": "标准研究"
-          },
-          {
-            "value": "deep",
-            "label": "深入研究"
-          }
-        ]
-      },
-      {
-        "key": "source.news",
-        "type": "boolean",
-        "label": "默认检索：新闻资讯",
-        "description": "新闻标题与摘要，不代表阅读全文。 至少开启一个来源；已有追踪任务保留原来的来源。",
-        "default": true
-      },
-      {
-        "key": "source.hackernews",
-        "type": "boolean",
-        "label": "默认检索：Hacker News",
-        "description": "技术社区讨论与部分评论。 至少开启一个来源；已有追踪任务保留原来的来源。",
-        "default": true
-      },
-      {
-        "key": "source.github",
-        "type": "boolean",
-        "label": "默认检索：GitHub",
-        "description": "公开 Issue 与 PR 讨论。 至少开启一个来源；已有追踪任务保留原来的来源。",
-        "default": true
-      },
-      {
-        "key": "source.reddit",
-        "type": "boolean",
-        "label": "默认检索：Reddit",
-        "description": "公开帖子，可用性受网络与限流影响。 至少开启一个来源；已有追踪任务保留原来的来源。",
-        "default": true
       }
     ]
   },

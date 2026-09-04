@@ -5,11 +5,12 @@ export interface Evidence {
   id: string; source: Source; title: string; url: string; summary: string;
   publishedAt?: string; author?: string; engagement?: number; comments?: string[];
   coverage: 'headline' | 'discussion'; score?: number;
+  interests?: string[];
 }
 export interface SearchInput { query: string; days: number; source: Source; limit?: number }
 export interface SearchResult {
   source: Source; status: 'ok' | 'no-results' | 'rate-limited' | 'unreachable' | 'error';
-  items: Evidence[]; message?: string;
+  items: Evidence[]; message?: string; interest?: string; query?: string;
 }
 export interface AiInput { system: string; prompt: string; maxOutputTokens?: number; signal?: AbortSignal }
 // Generic host AI API; no source names or research contracts belong in the host SDK.
@@ -45,6 +46,7 @@ export interface Run {
   evidence: Evidence[]; coverage: SearchResult[]; report: string; warnings: string[];
   sources?: Source[]; reportKind?: 'ai' | 'evidence' | 'empty';
   followUps: FollowUp[]; noteId?: string; watchId?: string; newEvidence?: number;
+  digest?: { frequency: 'daily' | 'weekly'; interests: string[]; periodKey: string };
 }
 export interface Watch { id: string; topic: string; days: number; scheduled: boolean; sources?: Source[]; depth?: Run['depth']; baselineUrls?: string[]; notebookId?: string; lastRunId?: string }
-export interface SavedState { version: 1; runs: Run[]; watches: Watch[] }
+export interface SavedState { version: 1; runs: Run[]; watches: Watch[]; digestPaused?: boolean; digestNotes?: { periodKey: string; noteId: string }[] }

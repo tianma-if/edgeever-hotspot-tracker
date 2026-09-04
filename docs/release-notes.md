@@ -1,25 +1,23 @@
 ## 中文
 
-v0.4.0 预览版：研究能力由插件独立实现。
+v0.5.0-preview.1（尚未发布）：只需关注领域与日报／周报。
 
-- 新闻、Hacker News、GitHub、Reddit 的搜索与解析随插件打包，不再依赖 Last30Days 或专用宿主研究接口。
-- 通过通用 AI 与公开 HTTPS 传输运行，沿用 EdgeEver 的模型设置，无需部署额外研究服务。
-- 保留原生插件设置、带引用的报告、失败后重新生成、研究历史、话题追踪、笔记保存与导出。
-- 公开订阅源返回异常页面时明确标记来源不可用，避免误报为没有结果。
+- 原生设置缩减为关注领域、生成频率。去掉手动研究、来源／深度选择和逐话题追踪流程。
+- 每日 09:00 或每周一 09:00，按领域汇总过去一天／七天的资料，自动生成一篇笔记。
+- 支持立即生成、暂停／恢复、最近结果、保存重试和同一期去重；无资料或无 AI 时如实标注。
+- 保留旧研究与追踪记录，停用旧逐话题计划，避免与新统一计划重复执行。
+- 设置保存后约 30 秒内应用；仅桌面端运行时执行，错过不补跑。
 
-**兼容性：本版为预发布，需要宿主支持 `ai:generate`、`network:public` 通用能力。缺少这些权限的旧版 EdgeEver 无法安装。需等待宿主正式发布通用能力后再供普通用户安装；请勿使用旧版源码注入脚本。**
-
-安装时使用本 Release 的 `manifest.json` 地址。公开来源仍可能受到网络与平台限流影响。
+仍为预览版，需要兼容宿主的通用 `ai:generate` 和 `network:public` 能力。不修改 EdgeEver，不部署其他研究服务，不增加密钥或 Cookie。宿主正式发布与生产调度验证仍是稳定可用的前提。此工作树尚未发布；不要把 v0.4.0 下载包当作新版。
 
 ## English
 
-v0.4.0 preview: research runs inside the plugin.
+v0.5.0-preview.1 (unreleased): just interests and a daily/weekly cadence.
 
-- Bundle news, Hacker News, GitHub, and Reddit search/parsing in the plugin, removing Last30Days and dedicated host research API dependencies.
-- Use generic AI and public HTTPS transport with existing EdgeEver model settings; no separate research service is required.
-- Retain native settings, cited reports, report retries, history, topic watches, note saving, and exports.
-- Mark unexpected public-feed pages as unavailable instead of reporting an empty search.
+- Reduce native settings to interests and frequency. Remove the manual research, source/depth selection, and per-topic watch workflow.
+- Automatically save one grouped note daily at 09:00 or Monday at 09:00, covering the preceding day/seven days.
+- Support generate now, pause/resume, recent results, save retries, and same-issue deduplication. Label missing evidence or AI honestly.
+- Retain legacy research/watch records and retire per-topic schedules before enabling the unified schedule.
+- Apply settings within approximately 30 seconds. Execution requires a running desktop app; missed runs are skipped.
 
-**Compatibility: this prerelease requires the host's generic `ai:generate` and `network:public` capabilities. Older EdgeEver versions without these permissions reject installation. Ordinary installation must wait for the host release containing these APIs; do not use the retired source-injection scripts.**
-
-Install using this release's `manifest.json` URL. Public sources remain subject to network availability and platform rate limits.
+Still a preview requiring compatible generic host `ai:generate` and `network:public` capabilities. No EdgeEver patches, separate research service, new credentials, or cookies. Official host release and production scheduling verification remain stable-availability gates. This working tree is not released; the v0.4.0 download is not this revision.

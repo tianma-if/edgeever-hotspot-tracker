@@ -1,211 +1,149 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { styles } from './styles';
-import { SOURCE_NAMES, SOURCES, type PluginHost, type ResearchBridge, type Run, type Watch, type Source } from './types';
-import { ask, canonicalUrl, exportMarkdown, newRun, research, regenerateReport, selectedSources } from './engine';
-import { boundedRequest } from './requests';
-import { ResearchStore } from './store';
-import { readResearchDefaults } from './settings';
-import { createResearchRuntime } from './runtime';
+import { SOURCE_NAMES, type PluginHost, type Run } from './types';
+import { exportMarkdown } from './engine';
+import { DigestService } from './digest';
+import { frequencyName, scheduleLabel } from './settings';
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = '') { const node = document.createElement(tag); node.className = className; if (text) node.textContent = text; return node; }
-function button(text: string, action: () => unknown, className = 'secondary') { const node = el('button', className, text); node.type = 'button'; node.addEventListener('click', () => { void action(); }); return node; }
-function renderMarkdown(text: string) { const node = el('div', 'report'); if (!DOMPurify.isSupported) { node.textContent = text; return node; } node.innerHTML = DOMPurify.sanitize(marked.parse(text, { async: false }), { USE_PROFILES: { html: true }, FORBID_TAGS: ['img', 'input', 'form', 'style', 'video', 'audio', 'iframe'], FORBID_ATTR: ['style'] }); for (const a of node.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener noreferrer'; } return node; }
-function download(filename: string, content: string, type: string) { const url = URL.createObjectURL(new Blob([content], { type })); const a = el('a'); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-const activeStatuses = ['planning', 'searching', 'writing'];
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = '') {
+  const node = document.createElement(tag); node.className = className; if (text) node.textContent = text; return node;
+}
+function button(text: string, action: () => unknown, className = 'secondary') {
+  const node = el('button', className, text); node.type = 'button'; node.addEventListener('click', () => { void action(); }); return node;
+}
+function renderMarkdown(text: string) {
+  const node = el('div', 'report');
+  if (!DOMPurify.isSupported) { node.textContent = text; return node; }
+  node.innerHTML = DOMPurify.sanitize(marked.parse(text, { async: false }), { USE_PROFILES: { html: true }, FORBID_TAGS: ['img', 'input', 'form', 'style', 'video', 'audio', 'iframe'], FORBID_ATTR: ['style'] });
+  for (const a of node.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+  return node;
+}
 export class TrackerApp {
-  readonly store: ResearchStore;
-  private bridge: ResearchBridge | null;
-  private view: 'home' | 'history' | 'watches' | 'report' = 'home';
-  private selected = ''; private topic = ''; private days = 30; private depth: Run['depth'] = 'standard';
-  private sources: Source[] = [...SOURCES]; private evidenceSource: Source | 'all' = 'all'; private historyQuery = '';
-  private lifetime = new AbortController();
-  private preferencesLoading = false;
-  private root?: ShadowRoot; private notice = ''; private running?: { run: Run; controller: AbortController };
-  private disposed = false; private pendingAsk = false; private askController?: AbortController;
-  private notebooks: { id: string; name: string }[] = []; private notebookId = '';
-  private saving = new Set<string>(); private modelName = ''; private configured = false;
-  private commandDisposers = new Map<string, () => void>();
-  constructor(private host: PluginHost) { this.store = new ResearchStore(host); this.bridge = createResearchRuntime(host); }
-  async init() {
-    await this.store.load();
-    try { this.notebooks = await boundedRequest(() => this.host.notebooks.list(), this.lifetime.signal, 10000); this.notebookId = this.notebooks.find((n) => n.id === 'nb_inbox')?.id ?? this.notebooks[0]?.id ?? ''; } catch { this.notice = '笔记本暂时无法加载，研究结果仍会保存在插件历史中。'; }
-    if (this.bridge) { try { const s = await boundedRequest(() => this.bridge!.ai.status(), this.lifetime.signal, 10000); this.configured = s.configured; this.modelName = s.modelName ?? ''; } catch { this.notice = '暂时无法连接 EdgeEver，请检查网络后重试。'; } }
-    this.registerWatches();
-  }
+  readonly service: DigestService;
+  get store() { return this.service.store; }
+  private root?: ShadowRoot;
+  private selected = '';
+  private notice = '';
+  private busy = false;
+  constructor(private host: PluginHost) { this.service = new DigestService(host, () => this.render()); }
+  async init() { await this.service.init(); }
   mount(container: HTMLElement) {
-    const mount = el('div'); mount.style.height = '100%'; mount.style.minHeight = '0'; container.append(mount);
-    const root = mount.attachShadow({ mode: 'open' }); this.root = root;
-    this.preferencesLoading = Boolean(this.host.settings);
-    this.render();
-    if (this.host.settings) void readResearchDefaults(this.host, this.lifetime.signal).then(defaults => {
-      if (this.disposed || this.root !== root) return;
-      this.days = defaults.days; this.depth = defaults.depth; this.sources = defaults.sources;
-      this.preferencesLoading = false; this.notice = defaults.warning; this.render();
-    }).catch(() => { /* Disposing the plugin cancels settings reads. */ });
+    const mount = el('div'); mount.style.height = '100%'; container.append(mount);
+    const root = mount.attachShadow({ mode: 'open' }); this.root = root; this.render();
+    void this.service.refresh().catch(() => {});
     return () => { mount.remove(); if (this.root === root) this.root = undefined; };
   }
-  dispose() { this.disposed = true; this.lifetime.abort(); this.running?.controller.abort(); this.askController?.abort(); for (const dispose of this.commandDisposers.values()) dispose(); this.root = undefined; }
-  private notify(message: string) { this.notice = message; this.render(); }
-  private async safely(action: () => Promise<unknown>) { try { await action(); } catch (error) { if (!this.disposed) this.notify(error instanceof Error ? error.message : '操作未完成，请重试。'); } }
-  private registerWatches() {
-    for (const watch of this.store.state.watches) if (!this.commandDisposers.has(watch.id)) {
-      this.commandDisposers.set(watch.id, this.host.commands.register({ id: `watch-${watch.id}`, title: `追踪：${watch.topic}`, run: async () => {
-        const run = await this.start(watch.topic, watch.days, watch, true);
-        if (!run || run.status !== 'complete' || !run.evidence.length) throw new Error('本次追踪未取得足够资料，请查看研究历史。');
-      } }));
-    }
+  dispose() { this.service.dispose(); this.root = undefined; }
+  private async safely(action: () => Promise<unknown>) {
+    if (this.busy) return;
+    this.busy = true; this.notice = ''; this.render();
+    try { await action(); } catch (error) { this.notice = error instanceof Error ? error.message : '操作未完成，请重试。'; }
+    finally { this.busy = false; this.render(); }
   }
-  private async start(topic: string, days = this.days, watch?: Watch, background = false): Promise<Run | undefined> {
-    if (!this.bridge) throw new Error('当前 EdgeEver 未提供插件网络访问能力。');
-    if (this.running) throw new Error('已有研究正在进行，请等待完成或先取消。');
-    if (!watch && this.preferencesLoading) throw new Error('正在读取插件设置，请稍候。');
-    if (!selectedSources(watch ? watch.sources : this.sources).length) throw new Error('请至少选择一个检索来源。');
-    if (!topic.trim()) { this.notify('先输入你想追踪的话题。'); return; }
-    const run = newRun(topic, days, watch ? (watch.depth ?? 'standard') : this.depth, selectedSources(watch ? watch.sources : this.sources)); run.watchId = watch?.id;
-    const previous = watch?.lastRunId ? this.store.state.runs.find((r) => r.id === watch.lastRunId) : undefined;
-    const controller = new AbortController(); this.running = { run, controller };
-    try {
-      await this.store.addRun(run);
-      if (!background) { this.view = 'report'; this.selected = run.id; }
-      this.notice = ''; this.render();
-      await research(this.bridge, run, controller.signal, async () => { await this.store.save(); if (!this.disposed) this.render(); });
-      if (watch && run.status === 'complete' && run.evidence.length) {
-        const baseline = watch.baselineUrls ?? previous?.evidence.map((e) => canonicalUrl(e.url));
-        const oldUrls = new Set(baseline ?? []);
-        run.newEvidence = baseline ? run.evidence.filter((e) => !oldUrls.has(canonicalUrl(e.url))).length : undefined;
-        watch.lastRunId = run.id; watch.baselineUrls = run.evidence.map(e => canonicalUrl(e.url)); await this.store.save();
-        if (watch.notebookId && run.evidence.length) await this.saveNote(run, watch.notebookId);
-      }
-    } finally { this.running = undefined; if (!this.disposed) this.render(); }
-    return run;
-  }
-  private async regenerate(run: Run) {
-    if (!this.bridge) throw new Error('当前 EdgeEver 未提供插件网络访问能力。');
-    if (this.running || this.pendingAsk) throw new Error('请等待当前研究或追问完成。');
-    const controller = new AbortController(); this.running = { run, controller }; this.notice = '';
-    try {
-      await regenerateReport(this.bridge, run, controller.signal, async () => { await this.store.save(); this.render(); });
-      this.notice = '报告已重新生成；检索资料和时间范围保持本次研究的记录。';
-    } catch (error) {
-      if (controller.signal.aborted) this.notice = '生成已取消，原报告和资料已保留。';
-      else throw error;
-    } finally { this.running = undefined; this.render(); }
-  }
-  private async saveNote(run: Run, notebookId = this.notebookId) {
-    if (run.noteId) { await this.host.ui.openNote(run.noteId); return; }
-    if (!notebookId) throw new Error('请先在 EdgeEver 创建一个笔记本。');
-    if (this.saving.has(run.id)) return;
-    this.saving.add(run.id); this.render();
-    try {
-      const note = await this.host.notes.create({ notebookId, title: `${run.topic} · ${run.createdAt.slice(0, 10)}`, contentMarkdown: exportMarkdown(run), tags: ['热点追踪'] });
-      run.noteId = note.id; await this.store.save(); this.notice = '研究报告已保存到笔记本。';
-    } finally { this.saving.delete(run.id); this.render(); }
-  }
-  private nav(view: typeof this.view) { this.view = view; if (view === 'report') this.evidenceSource = 'all'; this.notice = ''; this.render(); }
+  private show(run: Run) { this.selected = run.id; this.notice = ''; this.render(); this.resetScroll(); }
+  private resetScroll() { const shell = this.root?.querySelector('.shell'); if (shell) shell.scrollTop = 0; }
   private render() {
-    if (!this.root || this.disposed) return;
-    const focused = this.root.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
-    const focusKey = focused?.dataset.focus; const cursor = focused?.selectionStart;
+    if (!this.root) return;
+    // Background settings checks must not collapse expanded evidence/history.
+    const openDetails = new Set([...this.root.querySelectorAll<HTMLDetailsElement>('details[open][data-key]')].map(n => n.dataset.key));
+    const focusedText = this.root.activeElement?.tagName === 'BUTTON' ? this.root.activeElement.textContent : undefined;
+    const scroll = this.root.querySelector('.shell')?.scrollTop ?? 0;
     const style = el('style'); style.textContent = styles;
-    const shell = el('div', 'shell'); const rail = el('aside', 'rail');
-    const brand = el('div', 'brand'); brand.append(el('span', 'brand-icon', '↗')); const word = el('span', '', '热点追踪'); word.append(el('small', '', 'EDGEEVER')); brand.append(word); rail.append(brand);
-    for (const [key, title, count] of [['home', '开始研究', ''], ['watches', '我的追踪', this.store.state.watches.length], ['history', '研究历史', this.store.state.runs.length]] as const) {
-      const item = button(title, () => this.nav(key), `nav ${this.view === key ? 'active' : ''}`); if (count !== '') item.append(el('span', 'nav-count', String(count))); rail.append(item);
+    const shell = el('main', 'shell'); const content = el('div', 'content');
+    const header = el('header', 'topbar'); header.append(el('span', 'brand', '↗ 热点追踪'), el('span', 'tiny', '关心什么，就看什么'));
+    content.append(header);
+    for (const text of [this.notice, this.service.notice, this.service.settings.warning, this.service.scheduleWarning]) {
+      if (text) { const notice = el('div', 'notice', text); notice.setAttribute('role', 'status'); content.append(notice); }
     }
-    const foot = el('div', 'rail-footer'); foot.append(el('div', '', '让信息成为你的知识。'), el('div', '', '无需额外部署 · 保存在当前设备')); rail.append(foot);
-    const main = el('main', 'main'); const top = el('header', 'topbar'); top.append(el('strong', '', 'EdgeEver / 热点追踪'), el('span', '', this.running ? '● 研究进行中' : '你的信息观察站')); main.append(top);
-    const content = el('div', 'content'); if (this.notice) { const notice = el('div', 'notice', this.notice); notice.setAttribute('role', 'status'); content.append(notice); }
-    if (!this.bridge) content.append(el('div', 'note warning', '当前 EdgeEver 未提供插件网络访问能力，暂时不能检索资料。'));
-    if (this.view === 'home') this.renderHome(content);
-    else if (this.view === 'history') this.renderHistory(content);
-    else if (this.view === 'watches') this.renderWatches(content);
-    else { const run = this.store.state.runs.find((r) => r.id === this.selected); if (run) this.renderReport(content, run); else this.renderHistory(content); }
-    main.append(content); shell.append(rail, main); this.root.replaceChildren(style, shell);
-    if (focusKey) { const next = this.root.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-focus="${focusKey}"]`); next?.focus(); if (cursor != null) try { next?.setSelectionRange(cursor, cursor); } catch {} }
-  }
-  private select<T extends string>(values: [T, string][], current: string, label: string, change: (value: T) => void) {
-    const select = el('select', 'select'); select.setAttribute('aria-label', label);
-    for (const [value, text] of values) { const option = el('option', '', text); option.value = value; option.selected = value === current; select.append(option); }
-    select.addEventListener('change', () => change(select.value as T)); return select;
+    const run = this.store.state.runs.find(r => r.id === this.selected);
+    if (run) this.renderReport(content, run); else this.renderHome(content);
+    shell.append(content); this.root.replaceChildren(style, shell);
+    for (const detail of this.root.querySelectorAll<HTMLDetailsElement>('details[data-key]')) detail.open = openDetails.has(detail.dataset.key);
+    if (focusedText) [...this.root.querySelectorAll('button')].find(b => b.textContent === focusedText)?.focus({ preventScroll: true });
+    shell.scrollTop = scroll;
   }
   private renderHome(content: HTMLElement) {
-    content.append(el('div', 'eyebrow', 'FOLLOW WHAT MATTERS'), el('h1', '', '你关心的，正在发生什么？'), el('p', 'sub', '从最新资讯到社区讨论，找到值得关注的变化。\n输入一个话题，让零散的信息成为有据可查的研究笔记。'));
-    if (this.preferencesLoading) { const loading = el('div', 'note', '正在读取插件设置…'); loading.setAttribute('role', 'status'); content.append(loading); return; }
-    if (this.host.settings) content.append(el('p', 'tiny', '默认偏好可在插件卡片或插件工具菜单的「插件设置」中修改。重新打开面板时生效；下方调整仅用于本次打开的面板。'));
-    const composer = el('div', 'composer'); const input = el('textarea'); input.dataset.focus = 'topic'; input.setAttribute('aria-label', '研究主题'); input.placeholder = '例如：最近一个月，AI 编程工具有哪些新变化？'; input.value = this.topic; input.maxLength = 240; input.addEventListener('input', () => { this.topic = input.value; });
-    input.addEventListener('keydown', (event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void this.safely(() => this.start(this.topic)); }); composer.append(input);
-    const footer = el('div', 'composer-footer'); const controls = el('div', 'controls'); controls.append(this.select([['7', '最近 7 天'], ['30', '最近 30 天'], ['90', '最近 90 天']], String(this.days), '研究时间范围', (v) => { this.days = Number(v); }), this.select([['quick', '快速浏览'], ['standard', '标准研究'], ['deep', '深入研究']], this.depth, '研究深度', (v) => { this.depth = v; }));
-    const start = button(this.running ? '查看当前研究 ↗' : '开始研究 ↗', () => this.safely(async () => { if (this.running) { this.selected = this.running.run.id; this.nav('report'); } else await this.start(this.topic); }), 'primary'); start.disabled = !this.bridge || (!this.running && !this.sources.length); footer.append(controls, start); composer.append(footer); content.append(composer);
-    const chips = el('div', 'chips'); for (const query of ['AI 编程工具', '开源笔记软件', '新能源出行', 'Claude 与 ChatGPT 对比']) chips.append(button(query, () => { this.topic = query; this.render(); }, 'chip')); content.append(chips);
-    if (this.bridge && !this.host.ai) content.append(el('div', 'note warning', '可先浏览公开资料。当前 EdgeEver 尚未开放插件通用 AI 调用能力，暂时不能生成 AI 报告。'));
-    else if (this.bridge && !this.configured) content.append(el('div', 'note warning', '可先浏览公开资料。生成 AI 研究报告前，请到 EdgeEver「个人中心 → AI 设置」选择默认模型；已配置用户无需重复填写密钥。'));
-    else if (this.configured) content.append(el('div', 'tiny', `● 沿用 EdgeEver AI 配置${this.modelName ? ` · ${this.modelName}` : ''}`));
-    const heading = el('div', 'section-top'); heading.append(el('h2', '', '从不同视角，看清同一个话题'), el('span', 'tiny', `已选 ${this.sources.length} 个来源 · 点击切换`)); content.append(heading);
-    const grid = el('div', 'source-grid'); const descriptions = ['新闻标题与摘要', '技术讨论与部分评论', '公开 Issue 与 PR 讨论', '公开帖子 · 可用性受限'];
-    SOURCES.forEach((source, i) => { const tile = el('label', `source-tile ${this.sources.includes(source) ? 'chosen' : ''}`); const check = el('input'); check.type = 'checkbox'; check.checked = this.sources.includes(source); check.setAttribute('aria-label', `检索${SOURCE_NAMES[source]}`); check.dataset.focus = `source-${source}`; check.addEventListener('change', () => { if (!check.checked && this.sources.length === 1) { this.notify('请至少保留一个检索来源。'); return; } this.sources = SOURCES.filter(s => s === source ? check.checked : this.sources.includes(s)); this.render(); }); tile.append(check); tile.append(el('span', 'source-symbol', ['N', 'Y', '<>', 'r/'][i]), el('strong', '', SOURCE_NAMES[source]), el('span', 'tiny', descriptions[i])); grid.append(tile); }); content.append(grid);
-    content.append(el('div', 'note', '每份报告保留实际来源与时间。来源无法访问时会明确说明；新闻摘要不代表已读取全文。'));
-    if (this.store.state.runs.length) { const row = el('div', 'section-top'); row.append(el('h2', '', '最近研究'), button('查看全部 →', () => this.nav('history'), 'text-btn')); content.append(row); this.store.state.runs.slice(0, 2).forEach((run) => content.append(this.runCard(run))); }
-  }
-  private runCard(run: Run) { const card = el('div', 'card'); const row = el('div', 'row'); row.append(button(run.topic, () => { this.selected = run.id; this.nav('report'); }, 'card-title'), el('span', 'badge', run.status === 'complete' ? (run.reportKind === 'evidence' ? '资料已保留' : run.reportKind === 'empty' ? '证据不足' : '已完成') : run.status === 'interrupted' ? '已中断' : run.status === 'cancelled' ? '已取消' : activeStatuses.includes(run.status) ? '进行中' : '未完成')); card.append(row); const meta = el('div', 'meta'); meta.append(el('span', '', run.createdAt.slice(0, 16).replace('T', ' ')), el('span', '', `最近 ${run.days} 天`), el('span', '', `${run.evidence.length} 条证据`)); card.append(meta); return card; }
-  private renderHistory(content: HTMLElement) {
-    content.append(el('div', 'eyebrow', 'RESEARCH LIBRARY'), el('h1', '', '每次探索，都有迹可循'), el('p', 'sub', '最近 30 次研究保存在当前设备。重要报告可另存为 EdgeEver 笔记，随工作区同步。'));
-    const search = el('input', 'search-input'); search.type = 'search'; search.dataset.focus = 'history-query'; search.setAttribute('aria-label', '搜索研究历史'); search.placeholder = '按话题搜索研究历史…'; search.value = this.historyQuery;
-    const results = el('div', 'history-results');
-    const filter = () => {
-      const runs = this.store.state.runs.filter(run => run.topic.toLocaleLowerCase().includes(this.historyQuery.trim().toLocaleLowerCase()));
-      results.replaceChildren();
-      if (!runs.length) results.append(el('div', 'empty', this.store.state.runs.length ? '没有匹配的研究，试试其他关键词。' : '还没有研究记录。开始研究你关心的第一个话题吧。'));
-      else runs.forEach(run => results.append(this.runCard(run)));
-    };
-    search.addEventListener('input', () => { this.historyQuery = search.value; filter(); }); content.append(search, results); filter();
-  }
-  private renderWatches(content: HTMLElement) {
-    content.append(el('div', 'eyebrow', 'YOUR WATCHLIST'), el('h1', '', '持续关注，才看得见变化'), el('p', 'sub', '把研究主题加入追踪，随时更新资料。每日计划在桌面端保持运行时执行，关闭应用后不会继续。'));
-    if (!this.store.state.watches.length) content.append(el('div', 'empty', '完成一次研究后，点击「追踪这个话题」，它就会出现在这里。'));
-    for (const watch of this.store.state.watches) {
-      const card = el('div', 'card'); card.append(el('h3', '', watch.topic), el('p', 'tiny', `最近 ${watch.days} 天 · ${watch.scheduled ? '每日 09:00 更新（设备时区）' : '手动更新'}`));
-      const actions = el('div', 'actions'); const refresh = button('更新研究 ↗', () => this.safely(() => this.start(watch.topic, watch.days, watch)), 'primary'); refresh.disabled = Boolean(this.running); actions.append(refresh);
-      actions.append(button(watch.scheduled ? '关闭每日追踪' : '开启每日追踪', () => this.safely(async () => {
-        if (!this.host.schedules) throw new Error('每日追踪需要支持定时任务的 EdgeEver 桌面端。');
-        if (watch.scheduled) await this.host.schedules.remove(`watch-${watch.id}`);
-        else await this.host.schedules.upsert({ key: `watch-${watch.id}`, name: `热点追踪：${watch.topic}`, commandId: `watch-${watch.id}`, cronExpression: '0 9 * * *', missedRunPolicy: 'skip', isEnabled: true });
-        watch.scheduled = !watch.scheduled; await this.store.save(); this.render();
-      })));
-      actions.append(button('移除追踪', () => this.safely(async () => { if (watch.scheduled) await this.host.schedules?.remove(`watch-${watch.id}`); this.commandDisposers.get(watch.id)?.(); this.commandDisposers.delete(watch.id); this.store.state.watches = this.store.state.watches.filter((w) => w.id !== watch.id); await this.store.save(); this.render(); })));
-      card.append(el('p', 'tiny', `${selectedSources(watch.sources).map(s => SOURCE_NAMES[s]).join(' · ')} · ${{quick: '快速浏览', standard: '标准研究', deep: '深入研究'}[watch.depth ?? 'standard']}`));
-      card.append(actions);
-      if (watch.lastRunId) { const run = this.store.state.runs.find((r) => r.id === watch.lastRunId); if (run) { card.append(button(`最近研究：${run.createdAt.slice(0, 10)}${run.newEvidence !== undefined ? ` · ${run.newEvidence} 条本次新取得的证据` : ''}`, () => { this.selected = run.id; this.nav('report'); }, 'text-btn')); } }
-      const archive = this.select([['', '不自动归档'], ...this.notebooks.map((n) => [n.id, `自动归档至 ${n.name}`] as [string, string])], watch.notebookId ?? '', '追踪报告归档笔记本', (value) => { watch.notebookId = value || undefined; void this.safely(() => this.store.save()); }); card.append(archive); content.append(card);
+    const service = this.service; const settings = service.settings;
+    content.append(el('div', 'eyebrow', 'YOUR PERSONAL BRIEF'), el('h1', '', '你关注的热点，定期成为笔记。'), el('p', 'sub', '设置一次关注领域，剩下的交给热点追踪。每期一篇，按领域整理，附上来源。'));
+    const card = el('section', 'card preferences'); card.setAttribute('aria-label', '当前订阅设置');
+    const row = el('div', 'row'); row.append(el('h2', '', '我的热点笔记'), el('span', 'badge', service.loading ? '读取设置中' : this.store.state.digestPaused ? '已暂停' : service.scheduleActive ? '自动生成已开启' : '尚未开启自动生成')); card.append(row);
+    if (settings.interests.length) {
+      const chips = el('div', 'chips'); settings.interests.forEach(interest => chips.append(el('span', 'chip', interest))); card.append(chips);
+      card.append(el('p', 'schedule', `${frequencyName(settings.frequency)} · ${scheduleLabel(settings.frequency)}`));
+      card.append(el('p', 'tiny', '按设备时区执行 · 默认保存到收件箱，无收件箱时使用第一个笔记本'));
+    } else card.append(el('p', 'setup', '先告诉我你关心哪些领域，例如 AI、独立开发、科技产品。'));
+    card.append(el('p', 'tiny', '在「插件市场 → 热点追踪 → 插件设置」填写关注领域，选择日报或周报。保存后约 30 秒内应用，无需先打开本面板。'));
+    const actions = el('div', 'actions');
+    const generate = button(service.running ? '查看生成进度' : '立即生成', () => this.safely(async () => {
+      if (service.running?.run) { this.show(service.running.run); return; }
+      const pending = service.generate();
+      // Updates may create the draft after refreshing settings.
+      const run = await pending; if (run) this.show(run);
+    }), 'primary');
+    generate.disabled = this.busy || service.loading || (!service.running && (!settings.valid || !settings.interests.length || !this.host.network));
+    actions.append(generate);
+    if (settings.interests.length || this.store.state.digestPaused) {
+      const pause = button(this.store.state.digestPaused ? '恢复自动生成' : '暂停自动生成', () => this.safely(() => service.setPaused(!this.store.state.digestPaused)));
+      pause.disabled = this.busy; actions.append(pause);
     }
+    const refresh = button('刷新设置', () => this.safely(() => service.refresh()), 'text-btn'); refresh.disabled = this.busy; actions.append(refresh);
+    card.append(actions); content.append(card);
+    if (!this.host.network) content.append(el('p', 'notice', '当前 EdgeEver 未提供插件网络访问能力，请升级兼容版本。'));
+    if (!this.host.ai) content.append(el('p', 'notice', '当前宿主未提供通用 AI 能力，只能生成明确标注的资料汇总。'));
+    content.append(el('p', 'footnote', '自动生成仅在 EdgeEver 桌面端保持运行时执行，关闭应用期间不会生成，错过不补跑。沿用 EdgeEver 默认 AI 模型，调用按供应商计费。'));
+    if (service.running) {
+      const progress = el('div', 'progress'); progress.setAttribute('role', 'status');
+      progress.append(el('strong', '', service.running.run?.progress ?? '正在准备本期笔记…'), button('取消生成', () => service.cancel(), 'text-btn')); content.append(progress);
+    }
+    content.append(el('h2', 'section-title', '最近生成'));
+    if (!this.store.state.runs.length) content.append(el('div', 'empty', '还没有热点笔记。设置好后，可以先点「立即生成」看看。'));
+    this.store.state.runs.slice(0, 5).forEach(run => content.append(this.runCard(run)));
+    if (this.store.state.runs.length > 5) {
+      const history = el('details'); history.dataset.key = 'history'; history.append(el('summary', '', '更早的结果'));
+      this.store.state.runs.slice(5).forEach(run => history.append(this.runCard(run))); content.append(history);
+    }
+    if (this.store.state.watches.length) content.append(el('p', 'tiny', '旧版研究记录已保留，逐话题计划已退出新流程。请在插件设置统一选择关注领域；若计划迁移失败，会在上方提示。'));
+  }
+  private runCard(run: Run) {
+    const card = el('article', 'card result'); const row = el('div', 'row');
+    const status = run.noteId ? '已保存为笔记' : run.status === 'complete' ? '待保存' : ['planning', 'searching', 'writing'].includes(run.status) ? '生成中' : '未完成';
+    row.append(button(run.topic, () => this.show(run), 'card-title'), el('span', 'badge', status)); card.append(row);
+    card.append(el('p', 'tiny', `${run.digest?.interests.join(' · ') ?? '旧版研究记录'} · ${run.evidence.length} 条来源资料`)); return card;
   }
   private renderReport(content: HTMLElement, run: Run) {
-    content.append(el('div', 'eyebrow', 'RESEARCH BRIEF'), el('h1', '', run.topic), el('p', 'sub', `${run.createdAt.slice(0, 10)} · 最近 ${run.days} 天 · ${run.evidence.length} 条证据`));
-    if (activeStatuses.includes(run.status)) { const progress = el('div', 'progress'); progress.setAttribute('role', 'status'); progress.append(el('strong', 'pulse', run.progress)); const steps = el('div', 'steps'); const current = ['planning', 'searching', 'writing'].indexOf(run.status); for (let i = 0; i < 3; i++) steps.append(el('span', `step ${i <= current ? 'done' : ''}`)); progress.append(steps); progress.append(button('取消研究', () => { this.running?.controller.abort(); }, 'text-btn')); content.append(progress); }
-    else {
-      const actions = el('div', 'actions'); const save = button(run.noteId ? '打开已保存笔记 ↗' : '保存为笔记', () => this.safely(() => this.saveNote(run)), 'primary'); save.disabled = this.saving.has(run.id) || !run.evidence.length; actions.append(save);
-      if (!run.noteId) actions.append(this.select(this.notebooks.map((n) => [n.id, n.name]), this.notebookId, '保存到笔记本', (v) => { this.notebookId = v; }));
-      actions.append(button('追踪这个话题', () => this.safely(async () => { const watch = await this.store.addWatch(run.topic, run.days, run.sources, run.depth); if (!watch.lastRunId && run.evidence.length) { watch.lastRunId = run.id; watch.baselineUrls = run.evidence.map(e => canonicalUrl(e.url)); await this.store.save(); } this.registerWatches(); this.notify('已加入「我的追踪」，可在那里开启每日更新。'); })));
-      actions.append(button('导出 Markdown', () => download(`${run.topic.replace(/[\\/:*?"<>|]/g, '-')}.md`, exportMarkdown(run), 'text/markdown;charset=utf-8')));
-      actions.append(button('导出 HTML', () => { if (!DOMPurify.isSupported) { this.notify('当前环境无法安全导出 HTML，请使用 Markdown 导出。'); return; } const html = DOMPurify.sanitize(marked.parse(exportMarkdown(run), { async: false }), { USE_PROFILES: { html: true }, FORBID_TAGS: ['img', 'style', 'iframe'] }); download('edgeever-research.html', `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EdgeEver 热点追踪</title><style>body{max-width:850px;margin:40px auto;padding:20px;font:16px/1.9 system-ui;color:#192c26}a{color:#16835c}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:8px}pre{white-space:pre-wrap}</style><body>${html}</body></html>`, 'text/html;charset=utf-8'); }));
-      const retry = button(run.reportKind === 'ai' ? '重新生成报告' : '用已有资料生成报告', () => this.safely(() => this.regenerate(run))); retry.disabled = !this.host.ai || !this.bridge || !run.evidence.length || Boolean(this.running) || this.pendingAsk; actions.append(retry);
-      actions.append(button('重新研究', () => this.safely(async () => { this.sources = selectedSources(run.sources); this.depth = run.depth; return this.start(run.topic, run.days); }))); content.append(actions);
+    content.append(button('← 返回热点笔记', () => { this.selected = ''; this.render(); this.resetScroll(); }, 'text-btn'), el('h1', '', run.topic), el('p', 'sub', `${run.digest?.interests.join(' · ') ?? '旧版研究'} · 最近 ${run.days} 天`));
+    if (this.service.running?.run === run) {
+      const progress = el('div', 'progress'); progress.setAttribute('role', 'status'); progress.append(el('strong', '', run.progress), button('取消生成', () => this.service.cancel(), 'text-btn')); content.append(progress);
+    } else {
+      const actions = el('div', 'actions');
+      const save = button(run.noteId ? '打开笔记 ↗' : '重试保存', () => this.safely(async () => { if (run.noteId) await this.host.ui.openNote(run.noteId); else await this.service.saveNote(run); }), 'primary');
+      save.disabled = this.busy || (!run.noteId && run.status !== 'complete'); actions.append(save);
+      actions.append(button('导出 Markdown', () => {
+        const url = URL.createObjectURL(new Blob([exportMarkdown(run)], { type: 'text/markdown;charset=utf-8' }));
+        const a = el('a'); a.href = url; a.download = `hotspot-${run.createdAt.slice(0, 10)}.md`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }));
+      const retry = button('用已有资料重新生成', () => this.safely(() => this.service.regenerate(run)));
+      retry.disabled = this.busy || !this.host.ai || !run.evidence.length || Boolean(this.service.running);
+      actions.append(retry); content.append(actions);
     }
-    if (['cancelled', 'interrupted', 'error'].includes(run.status)) content.append(el('div', 'note warning', run.progress || '研究已中断，可重新研究。'));
-    for (const warning of run.warnings) content.append(el('div', 'note warning', warning));
-    if (run.newEvidence !== undefined) content.append(el('div', 'note', `相较上次，本轮新取得 ${run.newEvidence} 条不同链接的证据。该数量受检索覆盖影响，不等同于新增事件数。`));
-    if (run.queries.length) { const detail = el('details', 'note'); detail.append(el('summary', '', '本次检索关键词')); run.queries.forEach((query) => detail.append(el('div', '', query))); content.append(detail); }
-    if (run.noteId) content.append(el('p', 'tiny', '已保存笔记为当时的快照；后续追问或重新生成的报告可通过导出保留。'));
-    if (run.reportKind === 'evidence') content.append(el('div', 'note', '当前为检索资料，AI 报告尚未生成。可点击「用已有资料生成报告」，无需重复检索。'));
-    if (run.evidence.length) content.append(el('p', 'tiny', `证据范围：${new Set(run.evidence.map(e => e.source)).size} 个来源 · ${run.evidence.filter(e => e.coverage === 'headline').length} 条标题摘要 · ${run.evidence.filter(e => !e.publishedAt).length} 条日期未知。来源引用不等于事实已独立核实。`));
+    if (['cancelled', 'interrupted', 'error'].includes(run.status)) content.append(el('p', 'notice', run.progress));
+    if (run.reportKind === 'evidence') content.append(el('p', 'notice', '当前为资料汇总，不是 AI 综合报告。请检查 EdgeEver 默认 AI 配置，可用已有资料重新生成。'));
+    for (const warning of run.warnings) content.append(el('p', 'notice', warning));
     if (run.report) content.append(renderMarkdown(run.report));
-    if (run.coverage.length) { const heading = el('div', 'section-top'); heading.append(el('h2', '', '来源覆盖')); content.append(heading); const controls = el('div', 'chips'); for (const source of SOURCES) { const outcomes = run.coverage.filter((s) => s.source === source); if (!outcomes.length) continue; const count = run.evidence.filter((e) => e.source === source).length; const failed = outcomes.some((s) => !['ok', 'no-results'].includes(s.status)); controls.append(el('span', 'chip', `${SOURCE_NAMES[source]} · ${count} 条${failed ? ' · 部分请求未完成' : ''}`)); } content.append(controls); }
-    if (run.evidence.length) { const card = el('section', 'card'); card.append(el('h2', '', '可追溯的证据')); const filters: [Source | 'all', string][] = [['all', `全部来源（${run.evidence.length}）`], ...SOURCES.filter(source => run.evidence.some(e => e.source === source)).map(source => [source, `${SOURCE_NAMES[source]}（${run.evidence.filter(e => e.source === source).length}）`] as [Source, string])]; if (!filters.some(([key]) => key === this.evidenceSource)) this.evidenceSource = 'all'; card.append(this.select(filters, this.evidenceSource, '筛选证据来源', value => { this.evidenceSource = value; this.render(); })); for (const item of run.evidence.filter(e => this.evidenceSource === 'all' || e.source === this.evidenceSource)) { const evidence = el('article', 'evidence'); const link = el('a', '', `${item.id} · ${item.title}`); link.href = item.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; evidence.append(link, el('div', 'meta', `${SOURCE_NAMES[item.source]} · ${item.publishedAt?.slice(0, 10) ?? '日期未知'} · ${item.coverage === 'headline' ? '标题摘要' : '讨论内容'}`), el('p', '', item.summary.slice(0, 400))); if (item.comments?.length) { const detail = el('details'); detail.append(el('summary', 'tiny', `${item.comments.length} 条已取得的评论`)); item.comments.forEach((text) => detail.append(el('p', '', text))); evidence.append(detail); } card.append(evidence); } content.append(card); }
-    if (run.status === 'complete' && run.evidence.length && this.bridge && this.host.ai) {
-      const heading = el('div', 'section-top'); heading.append(el('h2', '', '接着问，让研究更进一步')); content.append(heading);
-      for (const entry of run.followUps) { content.append(el('h3', '', entry.question), renderMarkdown(entry.answer)); }
-      const form = el('form', 'follow'); const question = el('input'); question.placeholder = '基于这些资料，继续问一个问题…'; question.setAttribute('aria-label', '追问'); question.maxLength = 1200;
-      const submit = el('button', 'primary', this.pendingAsk ? '正在分析…' : '追问 ↗'); submit.type = 'submit'; submit.disabled = this.pendingAsk || Boolean(this.running); form.append(question, submit); form.addEventListener('submit', (event) => { event.preventDefault(); const q = question.value.trim(); if (!q || this.pendingAsk || this.running) return; this.pendingAsk = true; this.askController = new AbortController(); this.render(); void this.safely(async () => { try { const answer = await ask(this.bridge!, run, q, this.askController!.signal); run.followUps.push({ question: q, answer }); await this.store.save(); } finally { this.pendingAsk = false; this.render(); } }); }); content.append(form, el('p', 'tiny', '追问基于本次已取得的证据；需要最新资料时请重新研究。'));
+    if (run.noteId) content.append(el('p', 'tiny', '已保存笔记是生成当时的快照。重新生成不会覆盖原笔记，可导出更新后的报告。'));
+    const detail = el('details', 'evidence-details'); detail.dataset.key = `evidence-${run.id}`;
+    detail.append(el('summary', '', `来源与覆盖说明（${run.evidence.length} 条）`));
+    detail.append(el('p', 'tiny', '标题摘要不代表已读全文，来源引用不等于事实已独立核实。日报／周报只纳入日期明确且落在本期窗口内的资料。'));
+    for (const item of run.evidence) {
+      const evidence = el('article', 'evidence'); const link = el('a', '', `${item.id} · ${item.title}`);
+      if (/^https?:\/\//i.test(item.url)) link.href = item.url;
+      link.target = '_blank'; link.rel = 'noopener noreferrer';
+      evidence.append(link, el('p', 'tiny', `${SOURCE_NAMES[item.source]} · ${item.publishedAt?.slice(0, 10) ?? '日期未知'} · ${item.coverage === 'headline' ? '标题摘要' : '讨论内容'}`), el('p', '', item.summary.slice(0, 400)));
+      detail.append(evidence);
     }
+    for (const source of run.coverage.filter(s => !['ok', 'no-results'].includes(s.status))) detail.append(el('p', 'tiny', `${source.interest ? source.interest + ' · ' : ''}${SOURCE_NAMES[source.source]}：请求未完成，覆盖可能不足。`));
+    for (const entry of run.followUps) detail.append(el('h3', '', entry.question), renderMarkdown(entry.answer));
+    content.append(detail);
   }
 }
